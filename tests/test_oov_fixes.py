@@ -20,8 +20,7 @@ def decide(utterance, name="Ravi"):
 
 # ---- the dangerous path: a partial parse must never book
 @pytest.mark.parametrize("utt", [
-    pytest.param("kal shaam 6 baje ke aas paas, naam Ravi", marks=pytest.mark.xfail(
-        reason="'aas paas' as two tokens is not a hedge yet; fix after the blind OOV v2 run (guard frozen)", strict=True)),
+    "kal shaam 6 baje ke aas paas, naam Ravi",           # was a strict xfail until after the blind OOV v2 run
     "kal shaam around 6 baje, naam Ravi",
     "naale sanje 6 gante hattira, naanu Ravi",
     "kal subah lagbhag 10 baje, naam Ravi",
@@ -111,3 +110,44 @@ def test_red_flag_paraphrases(utt):
 ])
 def test_red_flag_negatives_still_quiet(utt):
     assert not red_flag_hits(utt), utt
+
+
+# ---- after the blind OOV v2 probe: structural partial-parse rule (own phrasings, not copied from the probe)
+@pytest.mark.parametrize("utt", [
+    "kal shaam chhe baje ke baad aaunga, naam Ravi",          # open-ended
+    "kal shaam 6 baje tak pahunch jaunga, naam Ravi",
+    "before 6 pm tomorrow please, Ravi here",
+    "naale sanje aaru ippattu gantege, naanu Ravi",          # unparsed Kannada minutes after the hour
+    "kal shaam saade chhe ke thoda baad, naam Ravi",
+    "kal shaam 6 baje, nahi nahi, usse ek ghanta baad, naam Ravi",  # time moved relative to itself
+])
+def test_leftover_number_or_offset_never_books(utt):
+    d = decide(utt)
+    assert d.action == "ask_again" and d.reason == "ambiguous_time", (d.action, d.reason, d.trace)
+
+
+@pytest.mark.parametrize("utt,date,time", [
+    ("3 din pehle gir gayi thi, kal shaam 6 baje aana hai, naam Ravi", "2026-10-08", "18:00"),   # 'pehle' is history
+    ("kal shaam 6 baje, naam Ravi, nahi nahi, Ravi Kumar", "2026-10-08", "18:00"),               # name correction
+    ("kal shaam 6 baje 2 hafte pehle wala dard, naam Ravi", "2026-10-08", "18:00"),
+])
+def test_history_and_name_corrections_still_book(utt, date, time):
+    d = decide(utt)
+    assert (d.action, d.date, d.time) == ("book", date, time), d.trace
+
+
+@pytest.mark.parametrize("utt", [
+    "seene pe bahut pressure hai, kal aana tha",
+    "papa ka munh ek taraf jhuk gaya hai",
+    "amma maatu sariyagi baralla, naale beku",
+    "kal raat hosh kho diya tha thodi der, aaj physio ke liye",
+    "her mouth looks crooked since an hour",
+])
+def test_red_flag_paraphrases_v2(utt):
+    assert red_flag_hits(utt), utt
+
+
+def test_unparsed_english_time_words_ask_not_book():
+    # "six" is not marked as a time here, so nothing is parsed: safe (missing_time), never a booking
+    d = decide("tomorrow at six fifteen pm, Ravi")
+    assert d.action == "ask_again" and not d.confirmed

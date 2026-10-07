@@ -37,7 +37,14 @@ RED_FLAGS: list[tuple[str, str]] = [
     # "achanakkaagi bhayankara tale novu"). Body part x symptom within a few words instead of fixed phrases.
     ("chest_pain", r"\b(?:dil|heart|seene|seena|sine|chhati|chhaati|chaati|chati|chest|ede|edeyalli|edeli|edenalli|yede|yedeyalli)"
                    r"(?: \w+){0,2} (?:dard|pain|paining|novu|nov|jalan|urita|uri|bhaari|bhaaripan|bhaara|bhara|dabav|jakdan|"
-                   r"tight|tightness|heavy|heaviness)"),
+                   r"tight|tightness|heavy|heaviness|pressure|dabaav|dabaw|hidi\w*|squeez\w*)"),
+    # Added after the blind OOV v2 probe (4/8 emergencies missed): mouth/face + crooked, speech failing,
+    # loss of consciousness. Same body-part x sign shape.
+    ("face_droop", r"\b(?:bayi|baayi|baai|munh|muh|mooh|mukha|chehra|chehera|face|hont|lips?|mouth)(?: \w+){0,2} "
+                   r"(?:vakra|vakara|tedha|tedhi|tedhe|sotta|sottagide|latak\w*|jhuk\w*|droop\w*|crooked|slant\w*)"),
+    ("speech", r"\b(?:maatu|maathu|maat)(?: \w+){0,2} (?:baralla|bartilla|barta illa|barthilla|aagtilla|aagta illa)"
+               r"|\b(?:bol|bolne|baat|awaaz|aawaz|zubaan|zabaan|words?|speech)(?: \w+){0,2} (?:nahi (?:pa|ho|nikal)\w*|ladkhad\w*|atak\w*|slur\w*|not coming|jumbled)"),
+    ("faint", r"\bhosh (?:nahi|nahin|kho|mein nahi|me nahi|chala)|\bunconscious|\bblack(?:ed)? out|\bbehosh"),
     ("headache", r"\b(?:achanak|achanakkaagi|achanakagi|sudden|suddenly|ekdum|bhayankara|bhayankar|tumba jaasti|worst)"
                  r"(?: \w+){0,3} (?:sar ?dard|sir ?dard|tale ?novu|headache)"),
     # Devanagari: the date normaliser is Latin-script only, but a missed emergency is not acceptable

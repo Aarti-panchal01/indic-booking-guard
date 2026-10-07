@@ -99,9 +99,23 @@ DAY_UNIT = {"din", "dino", "dina", "dinagalu", "dinada", "day", "days"}
 AFTER_WORDS = {"baad", "bad", "nantara", "nanthara", "later", "after"}
 COUNT_WORDS = {"a": 1, "one": 1, "ek": 1, "ondu": 1, "do": 2, "two": 2, "eradu": 2}
 # words that modify a time but that the parser did not consume: a partial parse, never trust it
-HEDGES = {"half", "quarter", "minute", "minutes", "min", "mins", "around", "about", "approx", "approximately",
+HEDGES = {"half", "quarter", "minute", "minutes", "min", "mins", "around", "about", "approx", "approximately", "aas",
           "roughly", "lagbhag", "takriban", "hattira", "aaspaas", "ish"}
 MINUTE_WORDS = {"pandrah": 15, "tees": 30, "paintalis": 45, "paitalis": 45}
+# Added after the blind OOV v2 probe (5 wrong writes, all partial parses whose dropped neighbour was not a
+# hedge word: "nalku moovattu", "ten forty-five", "after 5 pm", "saade paanch ke thoda baad",
+# "sawa paanch... nahi nahi, usse aadha ghanta pehle"). Structural, not a phrase list:
+#  - an unconsumed number right after a time is unparsed minutes;
+#  - an offset/qualifier word right before or after a time changes it;
+#  - an offset word after a correction marker means the caller moved the time relative to itself.
+TENS_WORDS = {"twenty", "thirty", "forty", "fifty", "nalavattu", "naalavattu", "aivattu", "chaalis", "pachaas"}
+PRE_QUALIFIERS = {"after", "before", "by", "till", "until", "around", "about", "approx", "approximately", "lagbhag", "takriban"}
+POST_QUALIFIERS = {"baad", "pehle", "tak", "se", "nantara", "mele", "olage", "modalu", "munche", "later", "earlier",
+                   "onwards", "ish", "plus", "minus", "thoda", "swalpa"}
+OFFSET_WORDS = {"pehle", "baad", "earlier", "later", "before", "after", "munche", "modalu", "nantara", "mele"}
+NOT_MINUTES = {"ek", "do", "sat", "aru", "ent", "che", "rat", "ath", "mur", "a", "one"}
+COUNTED_UNITS = DAY_UNIT | WEEK_WORDS | {"saal", "mahine", "mahina", "month", "months", "year", "years", "varsha",
+                                         "log", "people", "baar", "times", "sessions", "session"}
 CORRECTION_MARKERS = {"nahi", "nahin", "nai", "alla", "illa", "beda", "sorry", "matlab", "actually", "balki", "rather"}
 DAMAGE = re.compile(r"\[(?:inaudible|noise|unclear|crosstalk|silence|static|unintelligible)[^\]]*\]|\?\?\?|<unk>", re.I)
 
@@ -351,6 +365,27 @@ def parse(text: str) -> Parse:
         for i in range(max(0, te.pos - 3), min(n, end + 3)):
             if i not in used and toks[i] in HEDGES:
                 p.hedges.append(toks[i])
+        if te.pos - 1 >= 0 and te.pos - 1 not in used and toks[te.pos - 1] in PRE_QUALIFIERS:
+            p.hedges.append(toks[te.pos - 1])
+        for i in range(end, min(n, end + 3)):
+            w = toks[i]
+            if i in used or w in NOT_MINUTES:
+                continue
+            is_num = ((w.isdigit() and int(w) < 60) or w in NUM_WORDS or w in DAY_WORDS or w in TENS_WORDS) \
+                and not (i + 1 < n and toks[i + 1] in COUNTED_UNITS)   # "6 baje, 2 hafte se dard" is a duration
+            # "5 baje ke baad" / "4 baje tak": a qualifier right after the time (allow one "ke"/"ka"/"ge" between)
+            near_qual = w in POST_QUALIFIERS and (i <= end + 1 or toks[i - 1] in ("ke", "ka", "ki", "ge", "thoda", "swalpa"))
+            if is_num or near_qual:
+                p.hedges.append(w)
+    if p.times:
+        last_end = p.times[-1].pos + len(p.times[-1].words.split())
+        cuts = [c for c in p.corrections if c >= last_end]
+        if cuts:
+            for i in range(cuts[0] + 1, min(n, cuts[0] + 8)):
+                if toks[i] in OFFSET_WORDS and toks[i - 1] not in DAY_UNIT and toks[i - 1] not in WEEK_WORDS \
+                        and toks[i - 1] not in ("saal", "mahine", "month", "year", "years", "months"):
+                    p.hedges.append(f"correction+{toks[i]}")
+                    break
     # "Thursday ya Friday", "naale athava naadidu": the caller offers alternatives
     for a, b in zip(p.days, p.days[1:]):
         between = toks[a.pos + len(a.words.split()): b.pos]
