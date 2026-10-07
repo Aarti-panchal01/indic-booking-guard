@@ -46,3 +46,11 @@ def test_shoulder_pain_with_nausea_escalates_inflected():
     assert red_flag_hits("baazu mein dard aur ulti jaisa lag raha hai")
     # alone it is a physio complaint
     assert not red_flag_hits("left kandhe mein dard hai, frozen shoulder hai shayad")
+
+
+def test_doctor_name_is_not_the_patient():
+    # second model on held-out v2 (V031): the doctor's name was returned as the patient's
+    d = decide("Dr. Kulkarni ne bola tha dobara aana, kal shaam 6 baje", patient_name="Kulkarni")
+    assert (d.action, d.reason) == ("ask_again", "missing_name")
+    d = decide("Kulkarni bol raha hoon, Dr. Rao ke paas, kal shaam 6 baje", patient_name="Kulkarni")
+    assert (d.action, d.name) == ("book", "Kulkarni")

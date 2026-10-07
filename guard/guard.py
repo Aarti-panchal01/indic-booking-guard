@@ -73,6 +73,13 @@ def _plausible_name(name: str) -> bool:
     return 1 <= len(words) <= 3 and not any(w in NOT_NAME_WORDS or w.isdigit() for w in words)
 
 
+def _is_doctor(name: str, text: str) -> bool:
+    """Second model, held-out v2 V031: qwen2.5-coder:7b returned 'Menon' from 'Dr. Menon ge hinde torisidde'
+    (the caller's doctor) as the patient. Same lesson as H024: in the transcript, but in the wrong role."""
+    first = re.escape(name.split()[0].lower())
+    return re.search(rf"\b(?:dr|doctor|doc)\.?\s+{first}\b", text.lower()) is not None
+
+
 def pick_name(text: str, mr: ModelResult, trace: list[str]) -> Optional[str]:
     """Model's name, but only if those words appear in the transcript (no invented names)."""
     ex = mr.extraction
@@ -80,6 +87,8 @@ def pick_name(text: str, mr: ModelResult, trace: list[str]) -> Optional[str]:
         cand = _clean_name(ex.patient_name)
         if cand and not _plausible_name(cand):
             trace.append(f"model name {ex.patient_name!r} looks like day/time/booking words; ignored")
+        elif cand and _is_doctor(cand, text):
+            trace.append(f"model name {ex.patient_name!r} is the doctor in the transcript; ignored")
         elif cand and all(w.lower() in text.lower() for w in cand.split()):
             return cand
         else:
