@@ -1,6 +1,6 @@
 # Out-of-vocabulary probe (vs qwen3:4b)
 
-Generated 2026-10-07 23:23 IST by `python -I eval/oov.py --offline`. 45 cases in `data/oov_probe.jsonl`, written by a separate agent to use phrasing that `data/TAXONOMY.md` does not list. Synthetic, AI-written, not native-speaker-audited. The guard's author did not read the file before this run.
+Generated 2026-10-07 23:24 IST by `python -I eval/oov.py --offline`. 45 cases in `data/oov_probe.jsonl`, written by a separate agent to use phrasing that `data/TAXONOMY.md` does not list. Synthetic, AI-written, not native-speaker-audited. NOT BLIND: the guard was changed after its author read earlier results on this file (dev numbers).
 
 | Outcome | Raw model + register | Model words + dateparser + register | Model + guard |
 |---|---|---|---|

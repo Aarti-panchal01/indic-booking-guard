@@ -3,7 +3,7 @@
 The guard is not expected to understand these. The question is whether it fails SAFE:
 on words it does not know, it should ask again, never book the wrong slot, never miss an emergency.
 
-Usage (from build/): python -I eval/oov.py [--model qwen3:4b] [--offline]   -> eval/OOV_RESULTS.md
+Usage (from build/): python -I eval/oov.py [--model qwen3:4b] [--offline] [--probe data/oov_probe_v2.jsonl --out eval/OOV2_RESULTS.md]
 """
 from __future__ import annotations
 
@@ -20,7 +20,6 @@ sys.path.insert(0, str(ROOT / "eval"))
 from guard.model import CachedModel, OllamaModel  # noqa: E402
 from run import SYS_TITLE, WRITE_ACTIONS, correct, fmt_dec, fmt_exp, run_systems, wrong_write  # noqa: E402
 
-PROBE = ROOT / "data" / "oov_probe.jsonl"
 OUTCOMES = [
     ("correct", "Correct (same action, and same slot or reason)"),
     ("safe_ask", "Safe miss: asked again or handed off instead of the right action"),
@@ -49,8 +48,10 @@ def main() -> None:
     ap.add_argument("--model", default="qwen3:4b")
     ap.add_argument("--offline", action="store_true")
     ap.add_argument("--out", default="eval/OOV_RESULTS.md")
+    ap.add_argument("--probe", default="data/oov_probe.jsonl")
+    ap.add_argument("--blind", action="store_true", help="first run on this file; the guard's author has not read it")
     a = ap.parse_args()
-    cases = [json.loads(l) for l in PROBE.read_text(encoding="utf-8").splitlines() if l.strip()]
+    cases = [json.loads(l) for l in (ROOT / a.probe).read_text(encoding="utf-8").splitlines() if l.strip()]
     model = CachedModel(OllamaModel(a.model), ROOT / "eval" / "cache" / f"{a.model.replace(':', '_')}.jsonl", offline=a.offline)
     rows = run_systems(cases, model)
     systems = ["raw", "dateparser", "guard"]
@@ -59,8 +60,10 @@ def main() -> None:
 
     L = [f"# Out-of-vocabulary probe (vs {a.model})", "",
          f"Generated {datetime.now().strftime('%Y-%m-%d %H:%M')} IST by `python -I eval/oov.py{' --offline' if a.offline else ''}`. "
-         f"{n} cases in `data/oov_probe.jsonl`, written by a separate agent to use phrasing that `data/TAXONOMY.md` does not list. "
-         "Synthetic, AI-written, not native-speaker-audited. The guard's author did not read the file before this run.", "",
+         f"{n} cases in `{a.probe}`, written by a separate agent to use phrasing that `data/TAXONOMY.md` does not list. "
+         "Synthetic, AI-written, not native-speaker-audited. "
+         + ("BLIND: the guard's author did not read the file before this run." if a.blind else
+            "NOT BLIND: the guard was changed after its author read earlier results on this file (dev numbers)."), "",
          "| Outcome | " + " | ".join(SYS_TITLE[s] for s in systems) + " |", "|---|" + "---|" * len(systems)]
     for key, label in OUTCOMES:
         L.append(f"| {label} | " + " | ".join(f"{counts[s][key]}/{n}" for s in systems) + " |")
