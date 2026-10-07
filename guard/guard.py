@@ -13,7 +13,8 @@ from datetime import date, datetime, time, timedelta
 from typing import Optional
 
 from .baselines import dateparse_words
-from .normalise import DayExpr, Parse, parse, resolve_day, resolve_time, weekday_conflict
+from .normalise import (DAYPARTS, FRAC_POST, FRAC_PRE, FRAC_WHOLE, NUM_WORDS, RELATIVE, TIME_UNITS, WEEKDAY_OF,
+                        DayExpr, Parse, parse, resolve_day, resolve_time, weekday_conflict)
 from .redflags import red_flag_hits
 from .register import Register, RegisterWriteError
 from .schema import REASON_PRIORITY, Decision, ModelResult
@@ -59,14 +60,30 @@ def _name_from_text(text: str) -> Optional[str]:
     return None
 
 
+NOT_NAME_WORDS = (set(RELATIVE) | set(DAYPARTS) | set(NUM_WORDS) | set(WEEKDAY_OF) | TIME_UNITS | set(FRAC_PRE)
+                  | set(FRAC_POST) | set(FRAC_WHOLE) | NAME_STOP | {
+                      "ge", "ke", "ko", "maadi", "please", "chahiye", "book", "slot", "baje", "bekittu", "beku",
+                      "sigatta", "aagutta", "tomorrow", "today", "morning", "evening", "pm", "am", "null", "none"})
+
+
+def _plausible_name(name: str) -> bool:
+    """Held-out H024: qwen3:4b returned the time words 'parso sanje paune aaru ge' as the name.
+    Those words are in the transcript, so the in-transcript check alone let them through."""
+    words = [w.lower() for w in name.split()]
+    return 1 <= len(words) <= 3 and not any(w in NOT_NAME_WORDS or w.isdigit() for w in words)
+
+
 def pick_name(text: str, mr: ModelResult, trace: list[str]) -> Optional[str]:
     """Model's name, but only if those words appear in the transcript (no invented names)."""
     ex = mr.extraction
     if ex and ex.patient_name:
         cand = _clean_name(ex.patient_name)
-        if cand and all(w.lower() in text.lower() for w in cand.split()):
+        if cand and not _plausible_name(cand):
+            trace.append(f"model name {ex.patient_name!r} looks like day/time/booking words; ignored")
+        elif cand and all(w.lower() in text.lower() for w in cand.split()):
             return cand
-        trace.append(f"model name {ex.patient_name!r} not in transcript; ignored")
+        else:
+            trace.append(f"model name {ex.patient_name!r} not in transcript; ignored")
     nm = _name_from_text(text)
     if nm:
         trace.append(f"name from pattern: {nm}")

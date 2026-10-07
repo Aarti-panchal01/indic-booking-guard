@@ -232,3 +232,10 @@ def test_too_far(decide):
 def test_exactly_thirty_days_is_ok(decide):
     d = decide("November 6 subah 10 baje, naam Ravi")  # 30 days after Oct 7
     assert (d.action, d.date) == ("book", "2026-11-06"), d.trace
+
+
+def test_model_name_made_of_time_words_is_rejected(decide):
+    # Held-out H024 (found on the first held-out run): qwen3:4b put the time words in patient_name.
+    d = decide("parso sanje paune aaru ge book maadi please, appointment chahiye",
+               Extraction(intent="book", patient_name="parso sanje paune aaru ge"))
+    assert (d.action, d.reason, d.confirmed) == ("ask_again", "missing_name", False)
