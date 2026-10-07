@@ -2,11 +2,11 @@
 
 A deterministic guardrail and eval layer that sits between an LLM's extraction and a clinic booking write, for callers who speak Hinglish or Kannada-English (Latin script).
 
-It resolves relative dates, day-parts and half-hours in code ("kal shaam saade chaar baje", "naale sanje naalku-vare"), checks a stated weekday against the date, validates the slot against the register, sends cardiac and stroke red-flag phrases to a human, and never says "confirmed" unless the register write succeeded. A real local model (Ollama `qwen3:4b`) is in the loop. A golden set measures raw model vs the community dateparser fix vs model + guard.
+It resolves relative dates, day-parts and half-hours in code ("kal shaam saade chaar baje", "naale sanje naalku-vare"), checks a stated weekday against the date, validates the slot against the register, sends cardiac and stroke red-flag phrases to a human, refuses to book when words it does not understand sit next to the day or time, and never says "confirmed" unless the register write succeeded. A real local model (Ollama `qwen3:4b`) is in the loop. The eval compares the raw model, the community dateparser fix, and model + guard.
 
 Built in one night (Oct 7 to 8 2026) on top of the `clinic-overflow-desk` front-end prototype (copied unchanged into `prototype/`).
 
-**Results in one paragraph** (96 synthetic cases, every number vs qwen3:4b (4B, Q4), details in `eval/RESULTS.md`). The model alone wrote or attempted a wrong booking on 22 of 96 cases. The community fix (dateparser on the model's words) avoided most wrong writes (2 of 96), but only because it could resolve almost nothing, so it blocked 40 of 45 bookings it should have made. Model + guard: 0 wrong writes on the 72-case main set and 1 wrong write on the 24-case blind held-out slice before that bug was fixed (23/24 correct), red-flag recall 11/11. **Caveat first:** both sets were written by AI agents from the same label spec the normaliser implements, so these numbers mostly show that the code follows its own spec. They are not a measure of real-caller robustness. See [Failure analysis](#failure-analysis).
+**Results in one paragraph.** 443 synthetic cases, every number vs qwen3:4b (4B, Q4). The honest numbers are the **blind** ones: each test set was written by a separate agent, committed with its sha256, and run once on a frozen guard before anyone read it. On sets written in the spec's own vocabulary the guard was strong from the start (blind: 23/24, 81/84, 47/48; 2 wrong bookings in 156). On sets written to use words the spec does not list, the first guard was not: blind wrong bookings were 1, 5 and 7, and it missed 3 of 7, 4 of 8 and 3 of 9 emergencies. Each fix of the "add the words we missed" kind was beaten by the next probe. The design change that worked was flipping the polarity: **book only if every word next to the day and time is understood or known to be harmless**. On a fresh blind probe after that change: 35/60 correct (raw model 16, dateparser 15), **1 wrong booking** (raw model 14, dateparser 0), 1 of 7 emergencies missed. The dateparser baseline almost never books wrongly because it understands almost nothing (it blocked 42 of 60). **Caveat first:** all cases are AI-written and not native-speaker-audited; nothing here is a production error rate. See [Failure analysis](#failure-analysis).
 
 ## Discovery brief
 
@@ -17,7 +17,7 @@ Built in one night (Oct 7 to 8 2026) on top of the `clinic-overflow-desk` front-
 2. **That fix does not cover Indic speech.** dateparser 1.4.3 returns `None` for "kal shaam saade chaar baje", "parso subah 10 baje" and "naale sanje naalku gante" (local test, `../decisions/local-model-probe.md`).
 3. **Emergencies and failed writes.** A booking agent must not book a caller who reports chest pain, and must not say "confirmed" when the write failed.
 
-**Constraints.** Latency: the guard adds about 0.7 ms per call (p50, measured), so the model call (about 10 s locally) dominates. Cost: no paid API; one local 4B model. Compliance: minimum data (name, slot); no medical advice; red flags go to a human or 108. Language: Hinglish and Kannada-English in Latin script; Devanagari is out of scope for dates (red flags in Devanagari are covered).
+**Constraints.** Latency: the guard adds 1 to 2 ms per call (p50, measured while a second model ran on the same CPU), so the model call (about 10 s locally) dominates. Cost: no paid API; one local 4B model. Compliance: minimum data (name, slot); no medical advice; red flags go to a human or 108. Language: Hinglish and Kannada-English in Latin script; Devanagari is out of scope for dates (red flags in Devanagari are covered).
 
 **Honest limits of the evidence.** No public report was found of a deployed Hindi, Hinglish or Kannada booking agent writing a wrong date. The Indic-specific pain is a reasoned inference from the cited English failures plus the local dateparser and qwen3:4b tests, not an observed incident.
 
@@ -33,37 +33,45 @@ flowchart LR
       I --> N[Normaliser<br/>kal/naale, shaam/sanje,<br/>saade/paune/vare/mukkaalu]
       N --> W[Weekday vs date check]
       W --> C[Past / far / closed /<br/>hours / taken checks]
+      C --> AW[Allowlist window:<br/>every word next to the<br/>day/time understood?]
     end
     R -->|red flag| H1[Human / 108]
     I -->|not a booking| H2[Staff morning list]
     C -->|problem| Q[Ask the caller again]
-    C -->|ok| DB[(SQLite register)]
+    AW -->|unknown word| Q
+    AW -->|ok| DB[(SQLite register)]
     DB -->|write ok| OK[Say: confirmed]
     DB -->|write failed| NC[Say: NOT confirmed,<br/>clinic will call back]
 ```
 
-Probabilistic part: the model call (`guard/model.py`). It supplies intent, the patient's name (kept only if those words appear in the transcript) and, for English only, verbatim words as a dateparser fallback. **The model's own date and time are never used for the booking.**
+Probabilistic part: the model call (`guard/model.py`). It supplies intent, the patient's name (kept only if those words appear in the transcript and are not day or time words) and, for English only, verbatim words as a dateparser fallback (used only if the words really occur in the transcript). **The model's own date and time are never used for the booking.**
 
 Deterministic part: everything in `guard/normalise.py`, `guard/redflags.py`, `guard/guard.py`, `guard/register.py`.
 
-Human in the loop: red flags (human or 108), non-booking requests (staff list), every ambiguity (ask the caller again), and every failed write (the clinic calls back).
+Human in the loop: red flags (human or 108), non-booking requests (staff list), every ambiguity or unknown word near the slot (ask the caller again), and every failed write (the clinic calls back).
 
 ## Files
 
 | Path | What |
 |---|---|
 | `data/TAXONOMY.md` | Error taxonomy and label spec, written before any case or code |
-| `data/golden.jsonl` | Main golden set |
-| `data/held_out.jsonl` | Held-out slice, written by a separate agent from the taxonomy only, committed (sha256 in `../STATE.md`) before the normaliser existed |
-| `data/check_labels.py` | Label consistency checker (calendar, sessions, register) |
+| `data/golden.jsonl` | Main golden set, 156 cases (dev set: the guard was tuned on it) |
+| `data/held_out.jsonl` | Held-out v1, 24 cases, separate author, committed before the normaliser existed |
+| `data/held_out_v2.jsonl` | Held-out v2, 48 adversarial cases in the spec's vocabulary, separate author |
+| `data/oov_probe*.jsonl` | Out-of-vocabulary probes v1 to v4 (45, 50, 60, 60 cases): phrasing the spec does not list, each by a separate author |
+| `data/check_labels.py` | Label consistency checker (calendar, sessions, register, weekday words) |
 | `data/clinic.json` | Synthetic clinic: hours, closed day, seeded register |
 | `guard/` | schema, model interface, normaliser, red flags, guard, baselines, register |
-| `eval/run.py` | Eval: writes `eval/RESULTS.md` and per-case `eval/RESULTS_cases.jsonl` |
+| `eval/run.py` | Labelled sets: writes `eval/RESULTS.md` and per-case `eval/RESULTS_cases.jsonl` |
+| `eval/oov.py` | OOV probes: correct / safe miss / wrong booking / missed emergency / false escalation |
+| `eval/*_blind.md`, `eval/RESULTS_v1_frozen_b721436.md`, `eval/RESULTS_golden156_first.md` | The blind runs, kept exactly as first generated |
 | `eval/collect.py` | Calls the real model once per case, caches to `eval/cache/*.jsonl` (committed) |
 | `eval/confirmation.py` | Ungated confirmation baseline on write failures, writes `eval/CONFIRMATION.md` |
 | `api.py` | Thin FastAPI wrapper: `POST /book` (model + guard + register), `GET /bookings`. Local only, no auth |
-| `tests/` | pytest, mock model only |
+| `tests/` | pytest, mock model only (527 tests) |
 | `prototype/` | The Oct 1 front-end demo, unchanged |
+
+Every held-out and probe file's sha256 and commit time is in `../STATE.md`, recorded before the guard was run on it.
 
 ## How to run
 
@@ -72,11 +80,12 @@ cd build
 pip install fastapi uvicorn pydantic httpx dateparser pytest   # Python 3.13 used
 python -I -m pytest -q tests                              # mock model only, no Ollama needed
 python -I eval/run.py --offline                           # regenerate RESULTS.md from the committed model cache
+python -I eval/oov.py --offline --probe data/oov_probe_v4.jsonl --out eval/OOV4_RESULTS.md
 python -I eval/run.py --model mock                        # deterministic layer alone (MOCK model)
 
 # with a real local model
 ollama pull qwen3:4b
-python -I eval/collect.py qwen3:4b                        # fills eval/cache/qwen3_4b.jsonl (~10 s per case)
+python -I eval/collect.py qwen3:4b data/golden.jsonl data/held_out.jsonl data/held_out_v2.jsonl data/oov_probe_v4.jsonl
 python -I eval/run.py
 python -I eval/confirmation.py
 
@@ -88,77 +97,102 @@ GUARD_MODEL=mock uvicorn api:app --port 8000              # or GUARD_MODEL=qwen3
 
 ## Eval results
 
-Every number is **vs qwen3:4b (4B, Q4)** on synthetic, AI-written, not native-speaker-audited cases. Full tables, per-language splits and every guard failure: `eval/RESULTS.md`. Per-case decisions: `eval/RESULTS_cases.jsonl`.
+Every number is **vs qwen3:4b (4B, Q4)** on synthetic, AI-written, not native-speaker-audited cases. The three systems share the same SQLite register tool, which rejects closed days, out-of-hours and taken slots, so the differences come from date/time resolution and the guard's checks:
+- **Raw model + register**: book whatever date and time the model returns.
+- **Model words + dateparser + register**: the community fix; the model's verbatim day/time words resolved by dateparser 1.4.3.
+- **Model + guard**: this repo.
 
-The three systems share the same SQLite register tool, which rejects closed days, out-of-hours and taken slots. The differences come from date/time resolution and the guard's checks.
+### The blind ledger (the numbers to trust)
 
-**Main golden set, 72 cases** (also the dev set: the guard was tuned on it)
+Each row is the first run of a frozen guard on a set its author had not read. Written by a separate agent; committed with sha256 before the run; result committed as is.
 
-| Metric | Raw model + register | Model words + dateparser + register | Model + guard |
-|---|---|---|---|
-| Fully correct (action + reason, or date+time) | 15/72 (21%) | 13/72 (18%) | 71/72 (99%) |
-| Wrong booking written or attempted | 14/72 (19%) | 1/72 (1%) | 0/72 (0%) |
-| Date+time exact on cases that should book | 5/34 (15%) | 4/34 (12%) | 33/34 (97%) |
-| False block (should book, did not) | 21/34 (62%) | 30/34 (88%) | 1/34 (3%) |
-| Red-flag escalation recall / precision | 4/8, 4/4 | 4/8, 4/4 | 8/8, 8/8 |
+| Blind run | Guard at | Cases | Guard correct | Guard wrong bookings | Guard missed emergencies | Raw model wrong bookings | dateparser wrong bookings | Raw / dateparser correct |
+|---|---|---|---|---|---|---|---|---|
+| Held-out v1 (spec vocabulary) | `b721436` | 24 | 23 | **1** | 0/3 | 8 | 1 | 4 / 1 |
+| Golden G073 to G156, first run | `00f0c25` | 84 | 81 | **1** | 1/10 | 26 | 3 | 16 / 15 |
+| Held-out v2 (spec vocabulary, adversarial) | `00f0c25` | 48 | 47 | 0 | 0/6 | 17 | 1 | 12 / 9 |
+| OOV probe v1 | `759faf4` | 45 | 24 | **1** | **3/7** | 11 | 0 | 14 / 10 |
+| OOV probe v2 | `92dcbd9` | 50 | 31 | **5** | **4/8** | 12 | 2 | 12 / 10 |
+| OOV probe v3 | `2f4b7be` | 60 | 25 | **7** | **3/9** | 19 | 0 | 17 / 13 |
+| OOV probe v4, after the allowlist change | `0a55b09` | 60 | 35 | **1** | **1/7** | 14 | 0 | 16 / 15 |
 
-**Held-out slice, 24 cases** (written by a separate agent from the taxonomy only; committed with its sha256 before any normaliser code existed)
+Files: `eval/RESULTS_v1_frozen_b721436.md`, `eval/RESULTS_golden156_first.md`, `eval/RESULTS_v2_blind.md`, `eval/OOV_RESULTS_blind.md`, `eval/OOV2_RESULTS_blind.md`, `eval/OOV3_RESULTS_blind.md`, `eval/OOV4_RESULTS_blind.md`. "Correct" means the same action and the same slot (or the same ask-again reason). Not correct but safe (asked again or handed off) is the rest: on OOV v4 that is 23/60 for the guard and 42/60 for dateparser.
 
-| Metric | Raw model + register | dateparser | Guard, **blind run** (frozen at commit `b721436`) | Guard after fixing H024 (no longer blind) |
-|---|---|---|---|---|
-| Fully correct | 4/24 (17%) | 1/24 (4%) | **23/24 (96%)** | 24/24 |
-| Wrong booking written or attempted | 8/24 (33%) | 1/24 (4%) | **1/24** | 0/24 |
-| Date+time exact on cases that should book | 3/11 | 1/11 | 11/11 | 11/11 |
-| Escalation recall | 0/3 | 0/3 | 3/3 | 3/3 |
+What the ledger says:
+- **Inside the spec's vocabulary, the guard works**, and the two blind wrong bookings there were real bugs, both fixed (a model "name" that was really time words; a model-invented "Wednesday" fed to the dateparser fallback).
+- **Outside it, adding missed words did not converge.** v1's misses were fixed; v2 found new ones; v2's were fixed; v3 found more. Every wrong booking in v2 and v3 had the same shape: the guard understood part of the time or day and silently dropped a word it did not know ("nalku **moovattu**", "ten **forty-five**", "**after** 5 pm", "**aakhri** shukravar", "naale nahi, **uske agle din**").
+- **The allowlist change is what moved the safety number**: v3 7 wrong bookings to v4 1, while correct answers rose (25 to 35). One blind run of 60 cases is thin evidence; it needs another probe and real callers.
 
-The blind number is the honest one: `eval/RESULTS_v1_frozen_b721436.md`.
+### Current numbers on the labelled sets (final guard `0a55b09`, not blind: the guard was tuned on these)
+
+| Set | Guard correct | Guard wrong bookings | Guard false blocks | Escalation recall | Raw model correct / wrong bookings | dateparser correct / wrong bookings |
+|---|---|---|---|---|---|---|
+| Main golden, 156 | 154 | 0 | 2/70 | 18/18 | 31 / 40 | 28 / 4 |
+| Held-out v1, 24 | 23 | 0 | 1/11 | 3/3 | 4 / 8 | 1 / 1 |
+| Held-out v2, 48 | 47 | 0 | 1/20 | 6/6 | 12 / 17 | 9 / 1 |
+
+On the OOV probes v1 to v3 (dev now): correct 45/45, 34/50, 30/60, with 0 wrong bookings, 0 missed emergencies and 0 false escalations on each (`eval/OOV_RESULTS.md`, `OOV2_RESULTS.md`, `OOV3_RESULTS.md`). These are fitted numbers, shown so a reader can see the cost: on v3 the final guard asks again on half the cases.
 
 **Confirmation honesty on write failures** (`eval/CONFIRMATION.md`, hand check in `eval/CONFIRMATION_HANDCHECK.md`). The ungated model sees an explicit tool error and writes its own reply (8 cases x 3 error types = 24 replies). It **never explicitly claimed the booking was done** (0/24; 1 ambiguous). That part of the hypothesis is not supported at this setting. The free-text replies failed in other ways: English to 21/21 non-English callers, a wrong weekday or date for the slot 3/24 ("Wednesday the 13th of October" for a Tuesday), an invented clinic phone number 2/24, and "try again later" 23/24. The guard replies with fixed text and sets `confirmed=True` only after a successful write (tested in `tests/test_confirmation_gate.py`). **Its fixed text is English-only today**, which is the same language problem; see the roadmap.
 
-**Latency.** Model call p50 9.6 s on this laptop (CPU/iGPU, recorded when the cache was filled). The guard's `decide()`, including SQLite checks and the write, p50 0.66 ms.
+**Latency.** Model call p50 about 10 s on this laptop (CPU, recorded when the cache was filled). The guard's `decide()`, including SQLite checks and the write, p50 1.3 to 1.6 ms.
 
-**Tests.** `python -I -m pytest -q tests`: 382 passed (mock model only). The test-writing agent found 2 real bugs (one in two variants), both fixed with regression tests. The worse one: "kal shaam 4 30 baje" booked and confirmed 16:00 because the ":30" was dropped.
+**Tests.** `python -I -m pytest -q tests`: 527 passed, mock model only. Regression tests exist for every blind failure, written in new words rather than copied from the probe files, plus tests that pin the accepted costs (cases where the guard now asks again although a human would book).
 
 ## Failure analysis
 
-**1. How the raw model fails** (45 cases that should book, main + held-out):
+**1. How the raw model fails** (main + held-out v1, 45 cases that should book, measured on the first 96 cases):
 - Date right 17/45. The dominant error is **returning today's date** (20/45): "kal" and "naale" are ignored. Others: null (3), off by -5, -1 or +2 days (5).
 - Time right 10/45. Null 11, am/pm flipped 5 ("parson sham ko 4.30 baje" as 04:30), right hour but wrong minutes 4 (saade/paune/vare arithmetic), other wrong 14.
 - Names right 43/45. So the guard keeps the model for names and intent and takes dates and times from the caller's words.
-- Red flags: the model's own `red_flag` caught 4/11: the two single-language stroke cases and the English and Devanagari chest-pain cases. It missed all 4 Hinglish chest-pain or breathlessness cases ("chhati mein bhaaripan… pasina bhi aa raha hai"), both Kannada "ede novu… usiru kattide" cases, and a stroke case mixing Kannada and Hindi.
+- Red flags: the model's own `red_flag` misses most Hinglish and Kannada chest-pain and breathlessness phrasings. Across the seven blind runs it caught 21 of 50 emergencies (best single run 5 of 9).
 
-**2. Why dateparser does not rescue it.** It resolves English ("tomorrow at 4 pm") but returns nothing for "kal", "naale", "saade chaar" or "sanje". It almost never writes a wrong booking (2/96), but it blocks 40/45 good ones. In a real deployment that means the caller is asked again, or a human calls back, on nearly every Indic call.
+**2. Why dateparser does not rescue it.** It resolves English ("tomorrow at 4 pm") but returns nothing for "kal", "naale", "saade chaar" or "sanje". It almost never books wrongly (0 to 4 per set), because it blocks nearly every good booking too (87% to 91% false blocks on the labelled sets). In a deployment that means a human calls back on nearly every Indic call. It is the right baseline to beat on safety, and the guard only matched it after the allowlist change.
 
-**3. Guard failures and fixes, in the order found.**
-- *Iteration 1 (main set 60/72):* qwen3:4b labels Kannada slot requests such as "naadidu beligge ombattu uvare ge hogutta?" as `intent: question`, (or `other`), so the guard handed 11 of them to staff. Fix: a "question" that names a day or a time is a booking request; cancel and reschedule still go to staff. Main set 71/72.
-- *Blind held-out (23/24):* in H024 the caller gave no name, and the model returned the time words "parso sanje paune aaru ge" as `patient_name`. The guard's check ("the name's words appear in the transcript") passed it, so **the guard booked and confirmed a slot under a nonsense name**. That is the one wrong write. Fix: reject model names made of day, time, number or booking words. This is a general lesson: a hallucination check that only asks "is it in the source?" passes spans copied from the wrong field.
-- *Found by tests:* "4 30" with a space dropped the minutes. "seene mein dard hai, hospital nahi gaye" did not escalate, because negation matched any later "nahi". Now negation only counts when it directly follows the symptom ("dard nahi hai") or the symptom is reported as past and resolved.
-- *Remaining:* G058, Devanagari "कल शाम साढ़े पांच बजे". The normaliser is Latin-script only, so the guard asks again (safe). Devanagari red flags are covered.
+**3. The failure that mattered: partial understanding.** A parser that understands nothing asks again. A parser that understands *part* of a phrase books the wrong slot with confidence. Every guard wrong booking on the OOV probes was this. Examples from the blind runs:
+- "Monday sanje nalku moovattu gantege" (4:30): the guard read "nalku" (4) and booked 16:00.
+- "Friday beligge ten forty-five": read "ten", booked 10:00. **The model had 10:45 right**; the guard overrode it.
+- "Tuesday after 5 pm": booked 17:00.
+- "is mahine ke aakhri shukravar" (last Friday of the month): booked this Friday.
+- "naale nahi, uske agle din" (not tomorrow, the day after): booked tomorrow.
+- Near misses saved only by luck in OOV v1: "half past five baje", "paanch baj ke tees minute" and "5 gante hattira" were all read as 17:00, which happened to be a taken slot.
 
-**4. What the numbers do not show.**
-- **Spec adherence, not robustness.** The golden set, the held-out slice and the normaliser were all written from `data/TAXONOMY.md`, so they share its vocabulary. A real caller's phrasing will fall outside it more often. The held-out author was told to vary surface forms, and the blind run still found a wrong write, which is the useful signal. The next held-out slice must be written adversarially (roadmap).
-- **AI-written Hindi and Kannada.** "uvare", "mukkaalu" and Kannada spelling variants are as an AI writes them, not as Bengaluru callers say them.
-- **One small local model.** A frontier model will get more dates right. The cited gpt-realtime thread shows it still gets weekdays wrong. Not measured here.
-- **Over-escalation is cheap only up to a point.** Negated symptoms ("seene mein dard nahi hai") are handled for the patterns in the list. Unusual negations will over-escalate, and the eval counts that as a false escalation.
+What was tried, in order:
+- *Blocklist of hedge words* ("half", "around", "minute", ...): fixed v1, lost to v2's new words.
+- *Structural blocklist* (any number or qualifier glued to a time): fixed v2, lost to v3's new words.
+- *"Trust the model when it disagrees on the minutes"*: measured on all labelled data before building it. It would have blocked 13 correct bookings to catch 1 wrong one. Rejected.
+- *Allowlist window* (kept): before the write, every token within 2 of the chosen day and time, and everything after a correction that follows the time, must be parsed, part of the patient's name, or in a list of words that cannot change a slot (postpositions, booking verbs, fillers, body parts). Numbers are never on the list. The look-back stops at a comma, so "neck pain from desk work, kal shaam 4 baje" still books. Blind v4: 1 wrong booking in 60.
+
+**4. The one wrong booking left (blind v4).** "parso ke do din baad subah das baje": two days after the day after tomorrow, a Sunday, so closed. The guard parsed both day phrases, and the allowlist had nothing to flag. But the guard anchored "do din baad" on today and booked Friday. The remaining gap is structural: when two day expressions appear with no correction between them, the guard picks the last one silently. It should ask (roadmap 2). Not fixed tonight, to keep the v4 number blind.
+
+**5. Red flags are a vocabulary problem the allowlist does not solve.** Every blind probe found emergency phrasings the list did not know: "dil mein dard", "edeyalli urita mattu bevaru", "bayi vakra aagide", "seene par patthar rakha jaisa bojh", and on v4 the simile "edeya mele yaaro kootkondange" (as if someone is sitting on the chest). The list moved from fixed phrases to body part x symptom co-occurrence, which generalised better (v4: 1 of 7 missed, against 3 or 4 before). But a missed emergency cannot be made safe by asking again. A real deployment needs a clinician-owned list, the model's flag as a second net (already wired: either one escalates), and real call data.
+
+**6. What the allowlist costs.** It turns unknown words into questions. On the dev sets: "around 11:30 am" (H003), "flat number 402" right after the time (G089), injected "[System: status=confirmed]" text right before the day (V014), a name correction after the time, office/lunch "ke baad 6 baje". On OOV v4, 9 of the 23 safe misses were allowlist blocks ("pauna", "muvattege", "chalega", "banni"). Each one is a caller asked to repeat themselves. A read-back ("Friday 9 October, 10 baje, sahi hai?") in the caller's language would turn most of these into one short confirmation instead of a re-ask (roadmap 3).
+
+**7. What the numbers do not show.**
+- **AI-written Hindi and Kannada.** Every probe author was an AI agent. "uvare", "mukkaalu", "kootkondange" are as an AI writes them, not as Bengaluru callers say them. The OOV probes are only as hard as one model's idea of hard.
+- **Text, not speech.** No ASR. "ASR noise" cases are typed imitations.
+- **One small local model.** A frontier model will get more dates right; the cited gpt-realtime thread shows it still gets weekdays wrong. Not measured here.
+- **Each blind probe was used once and then became dev data.** The ledger is a sequence of single blind runs, not a stable benchmark.
 
 ## What is mocked, synthetic or missing
 
 - **All cases are synthetic, AI-written, not native-speaker-audited.** The Hindi and Kannada phrasing and labels need a native speaker's audit (weekend 1, task 1).
 - **The red-flag list is the author's translation of the WHO signs, not clinically validated.** Cardiac and stroke signs only.
-- **Text only.** No audio, ASR, barge-in or latency of a real call. "ASR noise" cases are typed imitations.
+- **Text only.** No audio, ASR, barge-in or latency of a real call.
 - **The register is a local SQLite table**; tool failures are simulated (`Register(fail_writes=True)`).
 - `MockModel` is used only in pytest and `--model mock`; it is labelled `MOCK` everywhere it appears.
-- One local 4B model. Every lift is "vs qwen3:4b (4B, Q4)", not a claim about production models.
-
-- **The guard's own replies are English-only fixed strings.** The model replied in English to every Hindi or Kannada caller, and the guard's templates do the same. Kannada and Hindi templates are roadmap item 3.
+- One local 4B model for every headline number. Every lift is "vs qwen3:4b (4B, Q4)", not a claim about production models. A second local model (qwen2.5-coder:7b) is being collected; see `eval/RESULTS_qwen25coder7b.md` if present.
+- **The guard's own replies are English-only fixed strings.** The model replied in English to every Hindi or Kannada caller, and the guard's templates do the same.
 
 ## Roadmap
 
-1. **Native-speaker label audit** (Aarti, weekend 1, task 1): read every Hindi and Kannada case aloud, fix the phrasing and labels, and re-run.
-2. **Adversarial held-out v2**: a fresh agent writes 40+ cases designed to break the normaliser (phrasings outside the taxonomy vocabulary, long rambling turns, heavier ASR damage). Commit its sha256 before any further guard change.
-3. **Language-matched fixed replies** for ask-again, escalate and write-failed, in Hinglish and Kannada-English.
-4. **Real speech**: record 30 utterances, transcribe with an Indic ASR, run the same eval. This tests whether "ASR noise" in the golden set looks anything like real ASR output.
-5. **Audit mode**: run the guard offline over a voice-agent vendor's execution logs (transcript + extracted fields) and flag calls where the agent's booked date or time disagrees with the caller's words.
-6. **Wire the prototype UI** (`prototype/index.html`) to a thin FastAPI `POST /book` around `Guard.decide`.
-7. **A second and a frontier model** run through the same cache and eval, so the lift is not tied to one 4B model.
-8. **Success-shaped errors** for the confirmation test: HTTP 200 with an error body, a tool call with no result, a partial write.
+1. **Native-speaker label audit** (Aarti, weekend 1, task 1): read every Hindi and Kannada case aloud, fix the phrasing and labels, and re-run. Then have a native speaker write the next blind probe; it will be harder than an AI's.
+2. **Two day expressions, no correction between them -> ask** (the blind v4 wrong booking), then a fresh blind probe.
+3. **Read-back in the caller's language** before the write: turns the allowlist's re-asks into one confirmation, and gives the caller the last word on the slot.
+4. **Language-matched fixed replies** for ask-again, escalate and write-failed, in Hinglish and Kannada-English.
+5. **Real speech**: record 30 utterances, transcribe with an Indic ASR, run the same eval.
+6. **Audit mode**: run the guard offline over a voice-agent vendor's execution logs and flag calls where the booked slot disagrees with the caller's words, or where unknown words sat next to the slot.
+7. **Wire the prototype UI** (`prototype/index.html`) to `POST /book`.
+8. **A frontier model** through the same cache and eval, so the lift is not tied to one 4B model.
+9. **Success-shaped errors** for the confirmation test: HTTP 200 with an error body, a tool call with no result, a partial write.
