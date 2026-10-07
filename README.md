@@ -68,7 +68,7 @@ Human in the loop: red flags (human or 108), non-booking requests (staff list), 
 | `eval/collect.py` | Calls the real model once per case, caches to `eval/cache/*.jsonl` (committed) |
 | `eval/confirmation.py` | Ungated confirmation baseline on write failures, writes `eval/CONFIRMATION.md` |
 | `api.py` | Thin FastAPI wrapper: `POST /book` (model + guard + register), `GET /bookings`. Local only, no auth |
-| `tests/` | pytest, mock model only (528 tests) |
+| `tests/` | pytest, mock model only (529 tests) |
 | `prototype/` | The Oct 1 front-end demo, unchanged |
 
 Every held-out and probe file's sha256 and commit time is in `../STATE.md`, recorded before the guard was run on it.
@@ -146,7 +146,7 @@ The one wrong booking left is the same case (OOV v4 S001) for both models. The s
 
 **Latency.** Model call p50 about 10 s on this laptop (CPU, recorded when the cache was filled). The guard's `decide()`, including SQLite checks and the write, p50 1.3 to 1.6 ms.
 
-**Tests.** `python -I -m pytest -q tests`: 528 passed, mock model only. Regression tests exist for every blind failure, written in new words rather than copied from the probe files, plus tests that pin the accepted costs (cases where the guard now asks again although a human would book).
+**Tests.** `python -I -m pytest -q tests`: 529 passed, mock model only. Regression tests exist for every blind failure, written in new words rather than copied from the probe files, plus tests that pin the accepted costs (cases where the guard now asks again although a human would book).
 
 ## Failure analysis
 
