@@ -13,7 +13,7 @@ from datetime import date, datetime, time, timedelta
 from typing import Optional
 
 from .baselines import dateparse_words
-from .normalise import (DAYPARTS, FRAC_POST, FRAC_PRE, FRAC_WHOLE, NUM_WORDS, RELATIVE, TIME_UNITS, WEEKDAY_OF,
+from .normalise import (DAYPARTS, FRAC_POST, FRAC_PRE, FRAC_WHOLE, HEDGES, NUM_WORDS, RELATIVE, TIME_UNITS, WEEKDAY_OF,
                         DayExpr, Parse, parse, resolve_day, resolve_time, weekday_conflict)
 from .redflags import red_flag_hits
 from .register import Register, RegisterWriteError
@@ -169,6 +169,12 @@ class Guard:
             trace.append(f"time '{te.words}' -> {hm}")
             if prob:
                 problems[prob] = te.words
+        if p.hedges:
+            problems["ambiguous_time"] = f"unparsed time words {p.hedges}"
+            trace.append(f"partial parse: time modifier(s) {p.hedges} not understood -> ambiguous_time")
+        if p.alternatives:
+            problems["ambiguous_date"] = "caller offered alternative days"
+            trace.append("alternative days offered -> ambiguous_date")
 
         # English fallback: dateparser on the model's verbatim words (never the model's own date),
         # and only if the caller actually said them: in G112 the model invented "Wednesday" for a
@@ -180,7 +186,8 @@ class Guard:
             dp = dateparse_words(ex.date_words, ref_naive)
             if dp:
                 d = dp.date(); trace.append(f"dateparser fallback on '{ex.date_words}' -> {d}")
-        if hm is None and not p.times and ex and ex.time_words and _said(ex.time_words, utterance):
+        if (hm is None and not p.times and ex and ex.time_words and _said(ex.time_words, utterance)
+                and not HEDGES & set(ex.time_words.lower().split())):
             dp = dateparse_words(ex.time_words, ref_naive)
             if dp and (dp.hour or dp.minute):
                 hm = (dp.hour, dp.minute); trace.append(f"dateparser fallback on '{ex.time_words}' -> {hm}")

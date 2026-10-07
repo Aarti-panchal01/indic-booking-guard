@@ -22,8 +22,8 @@ def test_model_invented_date_words_are_not_booked():
 
 def test_verbatim_english_date_words_still_used():
     # the fallback still works when the caller really said the words
-    d = decide("this is Meera, 12 days from now at 10 am please",
-               patient_name="Meera", date_words="12 days from now", time_words="10 am")
+    d = decide("this is Meera, 19/10/2026 at 10 am please",
+               patient_name="Meera", date_words="19/10/2026", time_words="10 am")
     assert (d.action, d.date, d.time) == ("book", "2026-10-19", "10:00")
     assert any("dateparser fallback" in t for t in d.trace)
 

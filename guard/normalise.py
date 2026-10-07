@@ -19,6 +19,7 @@ HI_NUM = {
 KN_NUM = {
     "ondu": 1, "ond": 1, "eradu": 2, "erdu": 2, "yeradu": 2, "mooru": 3, "muru": 3, "mur": 3,
     "naalku": 4, "nalku": 4, "naalakku": 4, "nalakku": 4, "naalk": 4, "nalk": 4, "aidu": 5, "aidhu": 5, "aid": 5,
+    "ayidu": 5, "aydu": 5,
     "aaru": 6, "aru": 6, "elu": 7, "yelu": 7, "entu": 8, "yentu": 8, "ent": 8, "ombattu": 9, "ombhattu": 9,
     "hattu": 10, "hatthu": 10, "hannondu": 11, "hanneradu": 12, "hanerdu": 12,
 }
@@ -67,9 +68,40 @@ RELATIVE = {
 DATE_MARKERS = {"tareekh", "tarikh", "taareekh", "tareek", "tarik", "tareeku", "tareekhu", "date",
                 "th", "st", "nd", "rd", "october", "oct", "november", "nov"}
 MONTHS = {"october": 10, "oct": 10, "november": 11, "nov": 11}
+WORD_DATE_MARKERS = {"tareekh", "tarikh", "taareekh", "tareek", "tarik", "tareeku", "tareekhu", *MONTHS}
 NEXT_WORDS = {"agle", "agli", "agla", "next", "mundina", "mundhina", "coming", "aane"}
 PAST_WORDS = {"last", "previous", "pichhle", "pichle", "pichhla", "pichla", "pichhli", "pichli", "kaleda", "hoda", "hodha"}
-WEEK_WORDS = {"hafte", "haftey", "week", "vaara", "vara", "waara"}
+WEEK_WORDS = {"hafte", "haftey", "hafta", "hafton", "week", "weeks", "vaara", "vara", "waara", "vaarada", "vaaradha", "varada"}
+
+# Added after the blind OOV probe (eval/OOV_RESULTS_blind.md). Not in TAXONOMY.md: these extend coverage,
+# they do not change any TAXONOMY rule.
+# day of month as a word ("pandrah tareekh", "hadinaidu tareeku"); 1-12 come from NUM_WORDS
+DAY_WORDS = {
+    "terah": 13, "chaudah": 14, "pandrah": 15, "solah": 16, "satrah": 17, "atharah": 18, "athara": 18,
+    "unnees": 19, "unnis": 19, "bees": 20, "ikkees": 21, "ikkis": 21, "baees": 22, "bais": 22, "teis": 23,
+    "tees": 30, "chaubees": 24, "pachchees": 25, "pachees": 25, "chhabbees": 26, "sattaees": 27, "atthaees": 28,
+    "untees": 29, "ikattees": 31, "iktees": 31,
+    "hadimooru": 13, "hadinaalku": 14, "hadinaidu": 15, "hadinaaru": 16, "hadinelu": 17, "hadinentu": 18,
+    "hattombattu": 19, "ippattu": 20, "ippattondu": 21, "ippattheradu": 22, "ippattmooru": 23,
+    "ippattnaalku": 24, "ippattaidu": 25, "ippattaaru": 26, "ippattelu": 27, "ippattentu": 28,
+    "ippattombattu": 29, "moovattu": 30, "moovattondu": 31,
+    "thirteen": 13, "fourteen": 14, "fifteen": 15, "sixteen": 16, "seventeen": 17, "eighteen": 18,
+    "nineteen": 19, "twenty": 20, "thirty": 30,
+}
+# English ordinals are dates without a marker ("fifteenth of this month")
+ORDINALS = {
+    "first": 1, "second": 2, "third": 3, "fourth": 4, "fifth": 5, "sixth": 6, "seventh": 7, "eighth": 8,
+    "ninth": 9, "tenth": 10, "eleventh": 11, "twelfth": 12, "thirteenth": 13, "fourteenth": 14,
+    "fifteenth": 15, "sixteenth": 16, "seventeenth": 17, "eighteenth": 18, "nineteenth": 19,
+    "twentieth": 20, "thirtieth": 30,
+}
+DAY_UNIT = {"din", "dino", "dina", "dinagalu", "dinada", "day", "days"}
+AFTER_WORDS = {"baad", "bad", "nantara", "nanthara", "later", "after"}
+COUNT_WORDS = {"a": 1, "one": 1, "ek": 1, "ondu": 1, "do": 2, "two": 2, "eradu": 2}
+# words that modify a time but that the parser did not consume: a partial parse, never trust it
+HEDGES = {"half", "quarter", "minute", "minutes", "min", "mins", "around", "about", "approx", "approximately",
+          "roughly", "lagbhag", "takriban", "hattira", "aaspaas", "ish"}
+MINUTE_WORDS = {"pandrah": 15, "tees": 30, "paintalis": 45, "paitalis": 45}
 CORRECTION_MARKERS = {"nahi", "nahin", "nai", "alla", "illa", "beda", "sorry", "matlab", "actually", "balki", "rather"}
 DAMAGE = re.compile(r"\[(?:inaudible|noise|unclear|crosstalk|silence|static|unintelligible)[^\]]*\]|\?\?\?|<unk>", re.I)
 
@@ -85,6 +117,8 @@ def tokenize(text: str) -> list[str]:
     s = text.lower()
     s = DAMAGE.sub(" <damaged> ", s)
     s = s.replace("’", "'").replace("o' clock", "oclock").replace("o'clock", "oclock").replace("o clock", "oclock")
+    # military / 24h without colon: "1730 hours", "0930 hrs"
+    s = re.sub(r"\b([01]\d|2[0-3])([0-5]\d)\s*(?:hours|hrs|hr)\b", r" \1:\2 ", s)
     s = re.sub(r"\ba\.m\.?", " am ", s)
     s = re.sub(r"\bp\.m\.?", " pm ", s)
     # 4:30 / 4.30 -> keep as one token "4:30"
@@ -131,6 +165,8 @@ class Parse:
     corrections: list[int] = field(default_factory=list)
     damaged: bool = False
     tokens: list[str] = field(default_factory=list)
+    hedges: list[str] = field(default_factory=list)       # unconsumed time modifiers next to a time
+    alternatives: bool = False                              # "Thursday ya Friday"
 
 
 def _num(tok: str) -> Optional[int]:
@@ -160,6 +196,14 @@ def parse(text: str) -> Parse:
         # "day after tomorrow"
         if t == "day" and at(k + 1) == "after" and at(k + 2) == "tomorrow":
             p.days.append(DayExpr(k, "relative", 2, words="day after tomorrow")); used.update({k, k + 1, k + 2}); continue
+        # "next to next day"
+        if t == "next" and at(k + 1) == "to" and at(k + 2) == "next" and at(k + 3) == "day":
+            p.days.append(DayExpr(k, "relative", 2, words="next to next day")); used.update(range(k, k + 4)); continue
+        # spans: "ek hafte baad", "aidu vaara nantara", "3 din baad", "one week from today", "in a week", "after 2 days"
+        span = _span(toks, k)
+        if span:
+            days, end = span
+            p.days.append(DayExpr(k, "relative", days, words=" ".join(toks[k:end]))); used.update(range(k, end)); continue
         if t in RELATIVE:
             # "kal se" / "kal raat se" = since yesterday (symptom history), not a booking day
             if t in ("kal", "kall") and (at(k + 1) == "se" or (at(k + 1) in DAYPARTS and at(k + 2) == "se")):
@@ -189,13 +233,30 @@ def parse(text: str) -> Parse:
             p.days.append(DayExpr(k, kind, wd, words=t)); used.add(k); continue
     # explicit dates: "10 tareekh", "9th", "october 9", "9 october", "9 ne tareeku"
     for k, t in enumerate(toks):
-        if not t.isdigit() or not (1 <= int(t) <= 31):
+        if k in used:
             continue
         nxt = at(k + 1)
         nxt2 = at(k + 2)
+        if t in ORDINALS or (t in ("twenty", "thirty") and nxt in ORDINALS and ORDINALS[nxt] < 10):
+            val, end = (ORDINALS[t], k + 1) if t in ORDINALS else (DAY_WORDS[t] + ORDINALS[nxt], k + 2)
+            month = MONTHS.get(at(end)) or (MONTHS.get(at(end + 1)) if at(end) == "of" else None) or MONTHS.get(at(k - 1))
+            p.days.append(DayExpr(k, "date", val, month=month, words=" ".join(toks[k:end]))); used.update(range(k, end))
+            continue
+        markers = DATE_MARKERS
+        if t.isdigit():
+            val = int(t)
+        elif t in DAY_WORDS or t in NUM_WORDS:
+            # a number word is a date only before "tareekh"/a month, or after a month ("do date" is not a date)
+            val = DAY_WORDS.get(t) or NUM_WORDS[t]
+            markers = WORD_DATE_MARKERS
+        else:
+            continue
+        if not (1 <= val <= 31):
+            continue
+        t = str(val)
         month = None
         is_date = False
-        if nxt in DATE_MARKERS or (nxt == "ne" and nxt2 in DATE_MARKERS):
+        if nxt in markers or (nxt == "ne" and nxt2 in markers):
             is_date = True
             month = MONTHS.get(nxt) or MONTHS.get(nxt2)
         elif at(k - 1) in MONTHS:
@@ -238,11 +299,20 @@ def parse(text: str) -> Parse:
         frac = None
         if at(k - 1) in FRAC_PRE and not hm:
             frac = FRAC_PRE[at(k - 1)]; start = k - 1
+        # English fractions: "half past five", "quarter past 10", "quarter to five"
+        elif not hm and (at(k - 2), at(k - 1)) in (("half", "past"), ("quarter", "past"), ("quarter", "to")):
+            frac = {"half": 30, "past": 15, "to": -15}[at(k - 2) if at(k - 2) == "half" else at(k - 1)]
+            start = k - 2
         if at(j) in FRAC_POST and not hm:
             frac = FRAC_POST[at(j)]; j += 1
         unit = False
         if at(j) in TIME_UNITS:
             unit = True; j += 1
+            # "paanch baj ke tees minute", "5 baje ke 15 minute"
+            mw = at(j + 1)
+            mval = int(mw) if mw.isdigit() else MINUTE_WORDS.get(mw)
+            if not hm and frac is None and at(j) == "ke" and mval is not None and 0 <= mval <= 59 and at(j + 2) in ("minute", "minutes", "min", "mins"):
+                minute = mval; j += 3
         ampm = None
         if at(j) in AMPM:
             ampm = AMPM[at(j)]; j += 1
@@ -254,6 +324,9 @@ def parse(text: str) -> Parse:
         marked = hm is not None or frac is not None or unit or ampm is not None
         if not marked and dp is not None and (at(k - 1) in DAYPARTS or at(k - 2) in DAYPARTS or at(k + 1) in DAYPARTS):
             marked = True
+        # "11 in the morning", "at 6 in the evening"
+        if not marked and at(k + 1) == "in" and at(k + 2) == "the" and at(k + 3) in DAYPARTS:
+            marked = True; dp = DAYPARTS[at(k + 3)]
         if not marked or (is_word and t in ("do", "ek", "sat", "aru", "ent", "che", "rat", "ath", "mur") and not (unit or frac or ampm)):
             k += 1; continue
         if h > 24 or minute > 59:
@@ -270,7 +343,46 @@ def parse(text: str) -> Parse:
         k = j
     p.days.sort(key=lambda d: d.pos)
     p.times.sort(key=lambda t: t.pos)
+
+    # Partial-parse guard (blind OOV probe: "half past five baje" was read as 17:00, "5 gante hattira" as 17:00):
+    # a time modifier the parser did not consume, within 3 tokens of a time, means we did not understand it.
+    for te in p.times:
+        end = te.pos + len(te.words.split())
+        for i in range(max(0, te.pos - 3), min(n, end + 3)):
+            if i not in used and toks[i] in HEDGES:
+                p.hedges.append(toks[i])
+    # "Thursday ya Friday", "naale athava naadidu": the caller offers alternatives
+    for a, b in zip(p.days, p.days[1:]):
+        between = toks[a.pos + len(a.words.split()): b.pos]
+        if len(between) <= 2 and any(w in ("ya", "or", "athava", "illandre", "leda") for w in between):
+            p.alternatives = True
     return p
+
+
+def _count(tok: str) -> Optional[int]:
+    if tok.isdigit():
+        return int(tok)
+    return COUNT_WORDS.get(tok) or NUM_WORDS.get(tok)
+
+
+def _span(toks: list[str], k: int) -> Optional[tuple[int, int]]:
+    """'ek hafte baad', 'aidu vaara nantara', '3 din baad', 'one week from today', 'in a week', 'after 2 days'
+    -> (days, end index). None if not a span. 'do hafte se dard' (since) is not a span."""
+    at = lambda i: toks[i] if 0 <= i < len(toks) else ""  # noqa: E731
+    lead = 1 if toks[k] in ("in", "after") else 0
+    num = _count(at(k + lead))
+    unit = at(k + lead + 1)
+    if num is None or not (unit in WEEK_WORDS or unit in DAY_UNIT):
+        return None
+    days = num * (7 if unit in WEEK_WORDS else 1)
+    end = k + lead + 2
+    if lead:
+        return days, end
+    if at(end) in AFTER_WORDS:
+        return days, end + 1
+    if at(end) == "from" and at(end + 1) in ("today", "now"):
+        return days, end + 2
+    return None
 
 
 def _looks_like_english_day_abbrev(toks: list[str], k: int) -> bool:

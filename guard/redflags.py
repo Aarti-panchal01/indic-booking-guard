@@ -33,6 +33,13 @@ RED_FLAGS: list[tuple[str, str]] = [
     ("speech", r"\bbolne (?:me|mein|mai) (?:dikkat|takleef|problem)|\bzabaan (?:ladkhada|ladkhadaa|lad khada)|\bslurred speech|\bcan'?t speak|\bmaatad(?:oke|ok|alu) (?:aagtilla|agtilla|aagta illa|aagtha illa)"),
     ("vision", r"\bachanak (?:dikhna|dikhai) band|\bsudden(?:ly)? (?:can'?t see|blurr?ed vision|vision loss)|\bkann?u kaanistilla"),
     ("headache", r"\b(?:bahut )?tez sa?i?r ?dard|\bsevere headache|\btumba tale ?novu|\bjor(?:dar)? sar dard"),
+    # Added after the blind OOV probe (3/7 emergencies missed: "dil mein dard", "edeyalli urita mattu bevaru",
+    # "achanakkaagi bhayankara tale novu"). Body part x symptom within a few words instead of fixed phrases.
+    ("chest_pain", r"\b(?:dil|heart|seene|seena|sine|chhati|chhaati|chaati|chati|chest|ede|edeyalli|edeli|edenalli|yede|yedeyalli)"
+                   r"(?: \w+){0,2} (?:dard|pain|paining|novu|nov|jalan|urita|uri|bhaari|bhaaripan|bhaara|bhara|dabav|jakdan|"
+                   r"tight|tightness|heavy|heaviness)"),
+    ("headache", r"\b(?:achanak|achanakkaagi|achanakagi|sudden|suddenly|ekdum|bhayankara|bhayankar|tumba jaasti|worst)"
+                 r"(?: \w+){0,3} (?:sar ?dard|sir ?dard|tale ?novu|headache)"),
     # Devanagari: the date normaliser is Latin-script only, but a missed emergency is not acceptable
     ("chest_pain", r"(?:सीने|सीना|छाती) (?:में )?(?:दर्द|भारीपन)"),
     ("breathing", r"सांस (?:लेने )?(?:में )?(?:तकलीफ|दिक्कत)|साँस (?:लेने )?(?:में )?(?:तकलीफ|दिक्कत)|सांस फूल"),
@@ -46,6 +53,8 @@ RED_FLAGS: list[tuple[str, str]] = [
 # arm / shoulder / jaw / back pain only counts together with sweat or nausea (chest/breath already escalate on their own)
 REFERRED_PAIN = r"\b(?:left )?(?:arm|haath|hath|bhuja|baazu|bazu|baanh|kandha|kandhe|kandhon|shoulder|jaw|jabda|jabde|davade|kai) (?:me |mein |mai )?(?:pain|dard|novu)|\b(?:pain|dard|novu) in (?:the |my |his |her )?(?:left )?(?:arm|shoulder|jaw)"
 NAUSEA = r"\b(?:ulti|vomit|vomiting|nausea|ji machal|vaanti|vaakarike)"
+SWEAT = r"\b(?:paseena|pasina|paseene|bevaru|beværu|sweat|sweating|sweaty)\b"
+CHEST_WORD = r"\b(?:dil|heart|seene|seena|chhati|chest|ede|edeyalli|edeli)\b"
 
 # service requests that mention chest/breath but are not symptoms
 NOT_SYMPTOM = re.compile(r"chest (?:physio|physiotherapy|therapy|exercise)|breathing exercise|saans (?:ki|wali) exercise|usirata exercise", re.I)
@@ -73,6 +82,8 @@ def red_flag_hits(text: str) -> list[str]:
                 continue
             hits.append(sign)
             break
-    if re.search(REFERRED_PAIN, s) and (re.search(NAUSEA, s) or "cold_sweat" in hits):
+    if re.search(REFERRED_PAIN, s) and (re.search(NAUSEA, s) or "cold_sweat" in hits or re.search(SWEAT, s)):
         hits.append("referred_pain_with_sweat_or_nausea")
+    if "chest_pain" not in hits and re.search(CHEST_WORD, s) and re.search(SWEAT, s):
+        hits.append("chest_word_with_sweat")
     return sorted(set(hits))
