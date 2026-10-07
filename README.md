@@ -151,7 +151,7 @@ The one wrong booking left is the same case (OOV v4 S001) for both models. The s
 ## Failure analysis
 
 **1. How the raw model fails** (main + held-out v1, 45 cases that should book, measured on the first 96 cases):
-- Date right 17/45. The dominant error is **returning today's date** (20/45): "kal" and "naale" are ignored. Others: null (3), off by -5, -1 or +2 days (5).
+- Date right 17/45. The dominant error is **returning today's date** when the caller meant another day (20/45), for example for "kal" or "naale". Others: null (3), off by -5, -1 or +2 days (5).
 - Time right 10/45. Null 11, am/pm flipped 5 ("parson sham ko 4.30 baje" as 04:30), right hour but wrong minutes 4 (saade/paune/vare arithmetic), other wrong 14.
 - Names right 43/45. So the guard keeps the model for names and intent and takes dates and times from the caller's words.
 - Red flags: the model's own `red_flag` misses most Hinglish and Kannada chest-pain and breathlessness phrasings. Across the seven blind runs it caught 21 of 50 emergencies (best single run 5 of 9).
