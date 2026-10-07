@@ -9,5 +9,6 @@
 | OOV probe v2 | `92dcbd9` | 50 | 31 | 6 | 4/8 | 12 | 2 | 12 / 10 |
 | OOV probe v3 | `2f4b7be` | 60 | 25 | 7 | 3/9 | 19 | 0 | 17 / 13 |
 | OOV probe v4, after the allowlist change | `0a55b09` | 60 | 35 | 1 | 1/7 | 14 | 0 | 16 / 15 |
+| OOV probe v5, second run of the allowlist guard | `5903181` | 60 | 33 | 0 | 4/7 | 7 | 1 | 21 / 14 |
 
-Totals over 371 blind cases (50 emergencies): raw: correct 91, wrong bookings 107, missed emergencies 29; dateparser: correct 73, wrong bookings 7, missed emergencies 29; guard: correct 266, wrong bookings 17, missed emergencies 12
+Totals over 431 blind cases (57 emergencies): raw: correct 112, wrong bookings 114, missed emergencies 34; dateparser: correct 87, wrong bookings 8, missed emergencies 34; guard: correct 299, wrong bookings 17, missed emergencies 16
