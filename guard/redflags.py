@@ -49,7 +49,14 @@ NAUSEA = r"\b(?:ulti|vomit|vomiting|nausea|ji machal|vaanti|vaakarike)"
 
 # service requests that mention chest/breath but are not symptoms
 NOT_SYMPTOM = re.compile(r"chest (?:physio|physiotherapy|therapy|exercise)|breathing exercise|saans (?:ki|wali) exercise|usirata exercise", re.I)
-NEGATION_AFTER = re.compile(r"^\W*(?:\w+\W+){0,2}(?:nahi|nahin|nai|illa|no more|not|gone|theek|thik|ok now|chala gaya|hogide)\b", re.I)
+# Negation only when the symptom itself is denied right after it ("dard nahi hai", "novu illa"),
+# or reported as past and resolved ("chest pain tha, ab theek hai"). A later, unrelated
+# "nahi"/"theek" ("hospital nahi gaye", "theek nahi lag raha", "not going away") does NOT negate.
+NEGATION_AFTER = re.compile(
+    r"^\W*(?:nahi|nahin|nai|illa|not)\b(?!\W*(?:gaye|gayi|gaya|ja|jaa|jaata|jata|jaati|ruk|rukta|rukti|lag|going|stopping|kam|hua|hoti|hota|horahi|hogide|aagta|aagtilla))"
+    r"|^\W*(?:\w+\W+){0,1}(?:tha|thi|ittu|was there)\W+(?:\w+\W+){0,2}(?:ab|eega|now)\W+(?:\w+\W+){0,1}(?:theek|thik|fine|ok|illa|nahi|gone)\b",
+    re.I,
+)
 NEGATION_BEFORE = re.compile(r"\b(?:no|not|never|koi|without|bina)\W+(?:\w+\W+){0,1}$", re.I)
 
 

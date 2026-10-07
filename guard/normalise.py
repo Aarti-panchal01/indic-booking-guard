@@ -88,6 +88,10 @@ def tokenize(text: str) -> list[str]:
     s = re.sub(r"\bp\.m\.?", " pm ", s)
     # 4:30 / 4.30 -> keep as one token "4:30"
     s = re.sub(r"\b(\d{1,2})[:.](\d{2})\b", r" \1:\2 ", s)
+    # "4 30 baje", "shaam 4 30" -> 4:30 (space-separated hour and minute, TAXONOMY 3.3)
+    dp_alt = "|".join(sorted(map(re.escape, DAYPARTS), key=len, reverse=True))
+    s = re.sub(r"\b(\d{1,2}) ([0-5]\d)\b(?=\s*(?:baje|bajey|gante\w*|ganteg|am|pm|oclock|ko\b))", r"\1:\2", s)
+    s = re.sub(rf"\b({dp_alt}) (?:ko |ke |)(\d{{1,2}}) ([0-5]\d)\b", r"\1 \2:\3", s)
     # glued units: 4baje, 4pm, 9th, 10tareekh
     s = re.sub(r"\b(\d{1,2}(?::\d{2})?)(am|pm|baje|gante\w*|ganteg|th|st|nd|rd|tareekh\w*|tarikh)\b", r"\1 \2", s)
     # Kannada glued fractions: naalkuvare, naalku-vare, naalakkuvare, 4-vare

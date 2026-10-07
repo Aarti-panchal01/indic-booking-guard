@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
 from collections import Counter, defaultdict
 from datetime import datetime
 from pathlib import Path
@@ -63,7 +64,10 @@ def run_systems(cases: list[dict], model) -> list[dict]:
         for sysname, fn in (("raw", raw_model_system), ("dateparser", dateparser_system)):
             reg = Register(fail_writes=c["tool_failure"])
             row[sysname] = fn(c["utterance"], ref, mr, reg)
-        row["guard"] = Guard(Register(fail_writes=c["tool_failure"])).decide(c["utterance"], ref, mr)
+        g = Guard(Register(fail_writes=c["tool_failure"]))
+        t0 = time.perf_counter()
+        row["guard"] = g.decide(c["utterance"], ref, mr)
+        row["guard_ms"] = (time.perf_counter() - t0) * 1000
         out.append(row)
     return out
 
@@ -162,7 +166,9 @@ def model_stats(rows: list[dict]) -> str:
         return f"model errors: {dict(errs)}"
     p50 = lat[len(lat) // 2]
     p90 = lat[int(len(lat) * 0.9) - 1]
-    return f"model calls: {len(rows)}, latency p50 {p50:.1f} s, p90 {p90:.1f} s (cached values from the original run); parse status: {dict(errs)}"
+    g = sorted(r["guard_ms"] for r in rows)
+    return (f"model calls: {len(rows)}, model latency p50 {p50:.1f} s, p90 {p90:.1f} s (recorded when the cache was filled); "
+            f"parse status: {dict(errs)}. Guard decide() incl. SQLite checks and write: p50 {g[len(g) // 2]:.2f} ms, max {g[-1]:.2f} ms (this run).")
 
 
 def main() -> None:
