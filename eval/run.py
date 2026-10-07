@@ -23,7 +23,12 @@ from guard.guard import Guard  # noqa: E402
 from guard.model import CachedModel, MockModel, OllamaModel  # noqa: E402
 from guard.register import Register  # noqa: E402
 
-FILES = {"main": "data/golden.jsonl", "held_out": "data/held_out.jsonl"}
+FILES = {"main": "data/golden.jsonl", "held_out": "data/held_out.jsonl", "held_out_v2": "data/held_out_v2.jsonl"}
+SPLIT_TITLE = {
+    "main": "Main golden set",
+    "held_out": "Held-out v1 (separate author; blind result was 23/24 with 1 wrong write, see RESULTS_v1_frozen_b721436.md; numbers below are AFTER the H024 fix, so not blind)",
+    "held_out_v2": "Held-out v2, adversarial (separate author, written after the guard was frozen; the guard's author never read it before this run)",
+}
 WRITE_ACTIONS = {"book", "write_failed"}
 
 
@@ -176,7 +181,7 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", default="qwen3:4b")
     ap.add_argument("--offline", action="store_true")
-    ap.add_argument("--split", choices=["main", "held_out", "both"], default="both")
+    ap.add_argument("--split", choices=["main", "held_out", "held_out_v2", "both", "all"], default="all")
     ap.add_argument("--dev", action="store_true", help="print guard failures on the chosen split; do not write RESULTS.md")
     ap.add_argument("--out", default="eval/RESULTS.md")
     a = ap.parse_args()
@@ -185,7 +190,10 @@ def main() -> None:
         model = MockModel()
     else:
         model = CachedModel(OllamaModel(a.model), ROOT / "eval" / "cache" / f"{a.model.replace(':', '_')}.jsonl", offline=a.offline)
-    splits = ["main", "held_out"] if a.split == "both" else [a.split]
+    if a.split == "all":
+        splits = [s for s in FILES if (ROOT / FILES[s]).exists()]
+    else:
+        splits = ["main", "held_out"] if a.split == "both" else [a.split]
     rows = {s: run_systems(load(s), model) for s in splits}
     systems = ["raw", "dateparser", "guard"]
 
@@ -214,7 +222,7 @@ def write_results(rows: dict, systems: list[str], model, a) -> None:
          "- **Model words + dateparser + register**: the community fix (LiveKit thread): the model's verbatim day/time words resolved by dateparser 1.4.3.",
          "- **Model + guard**: red-flag list, Hinglish/Kannada-English normaliser on the caller's own words, weekday-vs-date check, past/far checks, confirmation gate. The model is used for intent and name only.", ""]
     for s, rs in rows.items():
-        title = "Main golden set" if s == "main" else "Held-out slice (separate author, never read by the guard's author before this run)"
+        title = SPLIT_TITLE[s]
         L += [f"## {title}: {len(rs)} cases", "", model_stats(rs), "", table(rs, systems), "", "### By language mix", "", by_lang(rs, systems), ""]
     L += ["## Guard failures (every case the guard got wrong)", ""]
     for s, rs in rows.items():
