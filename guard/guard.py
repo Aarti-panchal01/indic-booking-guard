@@ -90,6 +90,13 @@ def pick_name(text: str, mr: ModelResult, trace: list[str]) -> Optional[str]:
     return nm
 
 
+def _said(words: str, utterance: str) -> bool:
+    """True if the model's 'verbatim' words really occur in the transcript (case and spacing ignored)."""
+    norm = lambda s: " ".join(re.sub(r"[^\w:]", " ", s.lower()).split())  # noqa: E731
+    w = norm(words)
+    return bool(w) and w in norm(utterance)
+
+
 def choose_anchor(p: Parse) -> Optional[DayExpr]:
     """The day the caller finally means: last date/relative expression, unless a weekday
     was said after a correction marker that follows it."""
@@ -163,13 +170,17 @@ class Guard:
             if prob:
                 problems[prob] = te.words
 
-        # English fallback: dateparser on the model's verbatim words (never the model's own date)
+        # English fallback: dateparser on the model's verbatim words (never the model's own date),
+        # and only if the caller actually said them: in G112 the model invented "Wednesday" for a
+        # caller who gave no day, and the fallback booked it.
         ex = mr.extraction
-        if (d is None and anchor is None) and ex and ex.date_words:
+        if ex and ex.date_words and not _said(ex.date_words, utterance):
+            trace.append(f"model date words '{ex.date_words}' not in transcript: ignored")
+        elif (d is None and anchor is None) and ex and ex.date_words:
             dp = dateparse_words(ex.date_words, ref_naive)
             if dp:
                 d = dp.date(); trace.append(f"dateparser fallback on '{ex.date_words}' -> {d}")
-        if hm is None and not p.times and ex and ex.time_words:
+        if hm is None and not p.times and ex and ex.time_words and _said(ex.time_words, utterance):
             dp = dateparse_words(ex.time_words, ref_naive)
             if dp and (dp.hour or dp.minute):
                 hm = (dp.hour, dp.minute); trace.append(f"dateparser fallback on '{ex.time_words}' -> {hm}")

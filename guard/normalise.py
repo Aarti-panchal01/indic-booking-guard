@@ -68,6 +68,7 @@ DATE_MARKERS = {"tareekh", "tarikh", "taareekh", "tareek", "tarik", "tareeku", "
                 "th", "st", "nd", "rd", "october", "oct", "november", "nov"}
 MONTHS = {"october": 10, "oct": 10, "november": 11, "nov": 11}
 NEXT_WORDS = {"agle", "agli", "agla", "next", "mundina", "mundhina", "coming", "aane"}
+PAST_WORDS = {"last", "previous", "pichhle", "pichle", "pichhla", "pichla", "pichhli", "pichli", "kaleda", "hoda", "hodha"}
 WEEK_WORDS = {"hafte", "haftey", "week", "vaara", "vara", "waara"}
 CORRECTION_MARKERS = {"nahi", "nahin", "nai", "alla", "illa", "beda", "sorry", "matlab", "actually", "balki", "rather"}
 DAMAGE = re.compile(r"\[(?:inaudible|noise|unclear|crosstalk|silence|static|unintelligible)[^\]]*\]|\?\?\?|<unk>", re.I)
@@ -172,6 +173,9 @@ def parse(text: str) -> Parse:
             prev, prev2 = at(k - 1), at(k - 2)
             nxt, nxt2 = at(k + 1), at(k + 2)
             kind = "weekday"
+            # "last Monday gir gaye", "pichhle hafte somvar": a past event, not the booking day (G130, V034)
+            if prev in PAST_WORDS or (prev in WEEK_WORDS and prev2 in PAST_WORDS):
+                used.add(k); continue
             if (prev in WEEK_WORDS and prev2 in NEXT_WORDS) or (prev in WEEK_WORDS and prev2 in ("ke", "ka", "ki", "")) and prev2 in NEXT_WORDS:
                 kind = "nextweek_weekday"
             elif prev in WEEK_WORDS and at(k - 2) in NEXT_WORDS:

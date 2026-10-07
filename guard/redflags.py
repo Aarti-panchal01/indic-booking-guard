@@ -44,7 +44,7 @@ RED_FLAGS: list[tuple[str, str]] = [
 ]
 
 # arm / shoulder / jaw / back pain only counts together with sweat or nausea (chest/breath already escalate on their own)
-REFERRED_PAIN = r"\b(?:left )?(?:arm|haath|bhuja|kandha|shoulder|jaw|jabda|davade|kai) (?:me |mein |mai )?(?:pain|dard|novu)|\b(?:pain|dard|novu) in (?:the |my |his |her )?(?:left )?(?:arm|shoulder|jaw)"
+REFERRED_PAIN = r"\b(?:left )?(?:arm|haath|hath|bhuja|baazu|bazu|baanh|kandha|kandhe|kandhon|shoulder|jaw|jabda|jabde|davade|kai) (?:me |mein |mai )?(?:pain|dard|novu)|\b(?:pain|dard|novu) in (?:the |my |his |her )?(?:left )?(?:arm|shoulder|jaw)"
 NAUSEA = r"\b(?:ulti|vomit|vomiting|nausea|ji machal|vaanti|vaakarike)"
 
 # service requests that mention chest/breath but are not symptoms
