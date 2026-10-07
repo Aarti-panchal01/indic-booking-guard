@@ -28,7 +28,8 @@ class Register:
     def __init__(self, clinic: Optional[dict] = None, db_path: str = ":memory:", fail_writes: bool = False):
         self.clinic = clinic or load_clinic()
         self.fail_writes = fail_writes  # simulate a tool failure
-        self.db = sqlite3.connect(db_path)
+        # check_same_thread=False: api.py serves requests from a thread pool and serialises register use with a lock.
+        self.db = sqlite3.connect(db_path, check_same_thread=False)
         self.db.execute(
             "CREATE TABLE IF NOT EXISTS bookings (slot TEXT PRIMARY KEY, name TEXT NOT NULL, source TEXT NOT NULL)"
         )
