@@ -68,7 +68,7 @@ Human in the loop: red flags (human or 108), non-booking requests (staff list), 
 | `eval/collect.py` | Calls the real model once per case, caches to `eval/cache/*.jsonl` (committed) |
 | `eval/confirmation.py` | Ungated confirmation baseline on write failures, writes `eval/CONFIRMATION.md` |
 | `api.py` | Thin FastAPI wrapper: `POST /book` (model + guard + register), `GET /bookings`. Local only, no auth |
-| `tests/` | pytest, mock model only (527 tests) |
+| `tests/` | pytest, mock model only (528 tests) |
 | `prototype/` | The Oct 1 front-end demo, unchanged |
 
 Every held-out and probe file's sha256 and commit time is in `../STATE.md`, recorded before the guard was run on it.
@@ -123,7 +123,7 @@ What the ledger says:
 - **Outside it, adding missed words did not converge.** v1's misses were fixed; v2 found new ones; v2's were fixed; v3 found more. Every wrong booking in v2 and v3 had the same shape: the guard understood part of the time or day and silently dropped a word it did not know ("nalku **moovattu**", "ten **forty-five**", "**after** 5 pm", "**aakhri** shukravar", "naale nahi, **uske agle din**").
 - **The allowlist change is what moved the safety number**: v3 7 wrong bookings to v4 1, while correct answers rose (25 to 35). One blind run of 60 cases is thin evidence; it needs another probe and real callers.
 
-### Current numbers on the labelled sets (final guard `0a55b09`, not blind: the guard was tuned on these)
+### Current numbers on the labelled sets (final guard `5903181` = `0a55b09` plus the doctor-name check; not blind: the guard was tuned on these)
 
 | Set | Guard correct | Guard wrong bookings | Guard false blocks | Escalation recall | Raw model correct / wrong bookings | dateparser correct / wrong bookings |
 |---|---|---|---|---|---|---|
@@ -133,11 +133,20 @@ What the ledger says:
 
 On the OOV probes v1 to v3 (dev now): correct 45/45, 34/50, 30/60, with 0 wrong bookings, 0 missed emergencies and 0 false escalations on each (`eval/OOV_RESULTS.md`, `OOV2_RESULTS.md`, `OOV3_RESULTS.md`). These are fitted numbers, shown so a reader can see the cost: on v3 the final guard asks again on half the cases.
 
+**Second model, same guard** (`eval/RESULTS_qwen25coder7b.md`, `eval/OOV*_RESULTS_qwen25coder7b.md`). qwen2.5-coder:7b was run on all 443 cases after the guard was finished; the guard was never tuned on its outputs. Totals over all seven sets, final guard:
+
+| | Raw model correct / wrong bookings | dateparser correct / wrong bookings | Guard correct / wrong bookings |
+|---|---|---|---|
+| qwen3:4b (tuned with) | 106 / 121 | 86 / 8 | 368 / 1 |
+| qwen2.5-coder:7b (unseen) | 120 / 106 | 89 / 9 | 352 / 1 |
+
+The one wrong booking left is the same case (OOV v4 S001) for both models. The second model found one new guard bug before this table: on held-out v2 it returned the caller's doctor ("Dr. Menon ge hinde torisidde") as the patient, and the guard booked under that name. Same lesson as H024 (the name was in the transcript, in the wrong role); fixed with a doctor-title check and a test, and qwen3's numbers did not change. The cost of a model the guard was not tuned with shows up as asking again more: main set false blocks 6/70 against 2/70, because qwen2.5 labels intents and names differently. qwen2.5's own `red_flag` also fired on two non-emergencies, and the guard escalates on either signal, so it inherited 1 false escalation on OOV v3 and 1 on v4.
+
 **Confirmation honesty on write failures** (`eval/CONFIRMATION.md`, hand check in `eval/CONFIRMATION_HANDCHECK.md`). The ungated model sees an explicit tool error and writes its own reply (8 cases x 3 error types = 24 replies). It **never explicitly claimed the booking was done** (0/24; 1 ambiguous). That part of the hypothesis is not supported at this setting. The free-text replies failed in other ways: English to 21/21 non-English callers, a wrong weekday or date for the slot 3/24 ("Wednesday the 13th of October" for a Tuesday), an invented clinic phone number 2/24, and "try again later" 23/24. The guard replies with fixed text and sets `confirmed=True` only after a successful write (tested in `tests/test_confirmation_gate.py`). **Its fixed text is English-only today**, which is the same language problem; see the roadmap.
 
 **Latency.** Model call p50 about 10 s on this laptop (CPU, recorded when the cache was filled). The guard's `decide()`, including SQLite checks and the write, p50 1.3 to 1.6 ms.
 
-**Tests.** `python -I -m pytest -q tests`: 527 passed, mock model only. Regression tests exist for every blind failure, written in new words rather than copied from the probe files, plus tests that pin the accepted costs (cases where the guard now asks again although a human would book).
+**Tests.** `python -I -m pytest -q tests`: 528 passed, mock model only. Regression tests exist for every blind failure, written in new words rather than copied from the probe files, plus tests that pin the accepted costs (cases where the guard now asks again although a human would book).
 
 ## Failure analysis
 
@@ -182,7 +191,7 @@ What was tried, in order:
 - **Text only.** No audio, ASR, barge-in or latency of a real call.
 - **The register is a local SQLite table**; tool failures are simulated (`Register(fail_writes=True)`).
 - `MockModel` is used only in pytest and `--model mock`; it is labelled `MOCK` everywhere it appears.
-- One local 4B model for every headline number. Every lift is "vs qwen3:4b (4B, Q4)", not a claim about production models. A second local model (qwen2.5-coder:7b) is being collected; see `eval/RESULTS_qwen25coder7b.md` if present.
+- Two small local models (qwen3:4b for every headline number, qwen2.5-coder:7b as a check). Every lift is against these, not a claim about production or frontier models.
 - **The guard's own replies are English-only fixed strings.** The model replied in English to every Hindi or Kannada caller, and the guard's templates do the same.
 
 ## Roadmap
