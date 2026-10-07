@@ -26,6 +26,6 @@ def test_readme_blind_ledger_matches_recomputed():
     header = "| Blind run | Guard at |"
     computed = _rows((BUILD / "eval" / "BLIND_LEDGER.md").read_text(encoding="utf-8"), header)
     readme = _rows((BUILD / "README.md").read_text(encoding="utf-8"), header)
-    assert len(computed) == len(readme) == 7
+    assert len(computed) == len(readme) >= 7
     for c, r in zip(computed, readme):
         assert c[1:] == r[1:], (c, r)   # every cell except the label

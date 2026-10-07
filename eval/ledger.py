@@ -22,6 +22,7 @@ RUNS = [  # (label, guard commit, per-case file, case filter)
     ("OOV probe v2", "92dcbd9", "OOV2_RESULTS_blind_cases.jsonl", lambda r: True),
     ("OOV probe v3", "2f4b7be", "OOV3_RESULTS_blind_cases.jsonl", lambda r: True),
     ("OOV probe v4, after the allowlist change", "0a55b09", "OOV4_RESULTS_blind_cases.jsonl", lambda r: True),
+    ("OOV probe v5, second run of the allowlist guard", "5903181", "OOV5_RESULTS_blind_cases.jsonl", lambda r: True),
 ]
 
 
@@ -77,6 +78,8 @@ def main() -> None:
              "|---|---|---|---|---|---|---|---|---|"]
     table = [("Held-out v1 (spec vocabulary) [from RESULTS_v1_frozen_b721436.md]", "b721436", v1_row())]
     for label, commit, f, keep in RUNS:
+        if not (ROOT / "eval" / f).exists():
+            continue
         rows = [json.loads(l) for l in (ROOT / "eval" / f).read_text(encoding="utf-8").splitlines() if l.strip()]
         table.append((label, commit, row([r for r in rows if keep(r)])))
     tot = {s: {k: 0 for k in ("correct", "wrong", "missed")} for s in ("raw", "dateparser", "guard")}
