@@ -99,7 +99,7 @@ def main():
         if not isinstance(exp, dict) or set(exp) != EXP_KEYS:
             v("expected keys wrong")
             continue
-        if not re.fullmatch(r"[GH]\d{3}", cid):
+        if not re.fullmatch(r"[GHV]\d{3}", cid):
             v("id format")
         if cid in seen:
             v("duplicate id")
@@ -110,7 +110,7 @@ def main():
             v(f"category {c['category']}")
         if not isinstance(c["tool_failure"], bool):
             v("tool_failure not bool")
-        if c["provenance"] != PROVENANCE:
+        if not str(c["provenance"]).startswith(PROVENANCE):
             v("provenance string")
         if not c["utterance"].strip() or not c["notes"].strip():
             v("empty utterance/notes")
