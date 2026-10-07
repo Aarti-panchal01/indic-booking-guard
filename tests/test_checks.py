@@ -195,9 +195,22 @@ def test_model_unusable_output_still_decided_on_transcript(register):
     assert (d.action, d.date, d.time) == ("book", "2026-10-08", "16:00")
 
 
-@pytest.mark.parametrize("intent", ["cancel", "reschedule", "question", "other"])
-def test_non_book_intent_goes_to_handoff(decide, intent):
+@pytest.mark.parametrize("intent", ["cancel", "reschedule"])
+def test_cancel_reschedule_intent_goes_to_handoff(decide, intent):
     d = decide("kal shaam 4 baje, naam Ravi", Extraction(intent=intent))
+    assert (d.action, d.confirmed) == ("handoff", False)
+
+
+@pytest.mark.parametrize("intent", ["question", "other"])
+def test_question_intent_with_day_time_is_a_booking_request(decide, intent):
+    # eval iteration 1: qwen3:4b labels Kannada slot requests ("...sigatta?") as questions
+    d = decide("naale sanje aiduvare gantege sigatta? hesaru Ravi", Extraction(intent=intent))
+    assert (d.action, d.date, d.time) == ("book", "2026-10-08", "17:30")
+
+
+@pytest.mark.parametrize("intent", ["question", "other"])
+def test_question_intent_without_day_time_goes_to_handoff(decide, intent):
+    d = decide("doctor se poochna tha ki exercise kaun si karni hai", Extraction(intent=intent))
     assert (d.action, d.confirmed) == ("handoff", False)
 
 

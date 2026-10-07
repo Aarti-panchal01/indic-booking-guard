@@ -108,16 +108,23 @@ class Guard:
             return Decision(action="escalate", say=SAY["escalate"], trace=["model red_flag (list did not fire)"])
 
         # 2. not a new booking -> staff
+        #    cancel/reschedule from the model are trusted. "question"/"other" are not: in eval
+        #    iteration 1 qwen3:4b called Kannada slot requests ("...gantege sigatta?") questions.
+        #    A question that names a day or a time is treated as a booking request.
+        p = parse(utterance)
         intent = mr.extraction.intent if mr.extraction else None
-        if intent and intent != "book":
+        if intent in ("cancel", "reschedule"):
             return Decision(action="handoff", say=SAY["handoff"], trace=[f"model intent {intent}"])
         if NON_BOOKING.search(utterance):
             return Decision(action="handoff", say=SAY["handoff"], trace=["non-booking keyword"])
+        if intent in ("question", "other"):
+            if not (p.days or p.times):
+                return Decision(action="handoff", say=SAY["handoff"], trace=[f"model intent {intent}, no day/time in transcript"])
+            trace.append(f"model intent {intent} overridden: transcript names a day/time")
         if intent is None:
             trace.append(f"model output unusable ({mr.error}); continuing on transcript only")
 
         # 3. resolve the caller's own words
-        p = parse(utterance)
         problems: dict[str, str] = {}
         d: Optional[date] = None
         hm: Optional[tuple[int, int]] = None
