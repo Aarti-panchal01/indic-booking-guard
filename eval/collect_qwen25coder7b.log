@@ -343,3 +343,5 @@ data/golden.jsonl 105/156 G105 0.0s err=None
 data/golden.jsonl 106/156 G106 0.0s err=None
 data/golden.jsonl 107/156 G107 0.0s err=None
 data/golden.jsonl 108/156 G108 0.0s err=None
+data/golden.jsonl 109/156 G109 35.3s err=None
+data/golden.jsonl 110/156 G110 13.9s err=None

@@ -27,7 +27,7 @@ FILES = {"main": "data/golden.jsonl", "held_out": "data/held_out.jsonl", "held_o
 SPLIT_TITLE = {
     "main": "Main golden set",
     "held_out": "Held-out v1 (separate author; blind result was 23/24 with 1 wrong write, see RESULTS_v1_frozen_b721436.md; numbers below are AFTER the H024 fix, so not blind)",
-    "held_out_v2": "Held-out v2, adversarial (separate author, written after the guard was frozen; the guard's author never read it before this run)",
+    "held_out_v2": "Held-out v2, adversarial (separate author; blind result was 47/48 with 0 wrong writes, see RESULTS_v2_blind.md; numbers below are on the final guard, after its author read the set, so not blind)",
 }
 WRITE_ACTIONS = {"book", "write_failed"}
 
