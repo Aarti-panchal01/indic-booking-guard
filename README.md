@@ -138,7 +138,7 @@ On the OOV probes v1 to v3 (dev now): correct 45/45, 34/50, 30/60, with 0 wrong 
 | | Raw model correct / wrong bookings | dateparser correct / wrong bookings | Guard correct / wrong bookings |
 |---|---|---|---|
 | qwen3:4b (tuned with) | 106 / 121 | 86 / 8 | 368 / 1 |
-| qwen2.5-coder:7b (unseen) | 120 / 106 | 89 / 9 | 352 / 1 |
+| qwen2.5-coder:7b (unseen) | 120 / 108 | 89 / 9 | 352 / 1 |
 
 The one wrong booking left is the same case (OOV v4 S001) for both models. The second model found one new guard bug before this table: on held-out v2 it returned the caller's doctor ("Dr. Menon ge hinde torisidde") as the patient, and the guard booked under that name. Same lesson as H024 (the name was in the transcript, in the wrong role); fixed with a doctor-title check and a test, and qwen3's numbers did not change. The cost of a model the guard was not tuned with shows up as asking again more: main set false blocks 6/70 against 2/70, because qwen2.5 labels intents and names differently. qwen2.5's own `red_flag` also fired on two non-emergencies, and the guard escalates on either signal, so it inherited 1 false escalation on OOV v3 and 1 on v4.
 

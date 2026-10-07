@@ -67,6 +67,9 @@ def main() -> None:
          "| Outcome | " + " | ".join(SYS_TITLE[s] for s in systems) + " |", "|---|" + "---|" * len(systems)]
     for key, label in OUTCOMES:
         L.append(f"| {label} | " + " | ".join(f"{counts[s][key]}/{n}" for s in systems) + " |")
+    # the outcomes above are exclusive (a booked emergency counts once, as a missed emergency); this line is not
+    L.append("| All wrong bookings, incl. booked emergencies (not exclusive) | "
+             + " | ".join(f"{sum(wrong_write(r['case'], r[s]) for r in rows)}/{n}" for s in systems) + " |")
     feats = Counter(f for r in rows for f in r["case"].get("oov_features", []))
     L += ["", "## Guard result per case", "", "| id | lang | oov features | expected | guard | outcome |", "|---|---|---|---|---|---|"]
     for r in rows:

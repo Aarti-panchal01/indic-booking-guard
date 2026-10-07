@@ -1,6 +1,6 @@
 # Out-of-vocabulary probe (vs qwen2.5-coder:7b)
 
-Generated 2026-10-08 01:31 IST by `python -I eval/oov.py --offline`. 45 cases in `data/oov_probe.jsonl`, written by a separate agent to use phrasing that `data/TAXONOMY.md` does not list. Synthetic, AI-written, not native-speaker-audited. NOT BLIND: the guard was changed after its author read earlier results on this file (dev numbers).
+Generated 2026-10-08 01:45 IST by `python -I eval/oov.py --offline`. 45 cases in `data/oov_probe.jsonl`, written by a separate agent to use phrasing that `data/TAXONOMY.md` does not list. Synthetic, AI-written, not native-speaker-audited. NOT BLIND: the guard was changed after its author read earlier results on this file (dev numbers).
 
 | Outcome | Raw model + register | Model words + dateparser + register | Model + guard |
 |---|---|---|---|
@@ -9,6 +9,7 @@ Generated 2026-10-08 01:31 IST by `python -I eval/oov.py --offline`. 45 cases in
 | WRONG BOOKING written or attempted | 10/45 | 0/45 | 0/45 |
 | MISSED EMERGENCY (label escalate, system did not) | 4/45 | 4/45 | 0/45 |
 | False escalation (escalated a non-emergency) | 0/45 | 0/45 | 0/45 |
+| All wrong bookings, incl. booked emergencies (not exclusive) | 11/45 | 0/45 | 0/45 |
 
 ## Guard result per case
 
