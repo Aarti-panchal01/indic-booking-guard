@@ -1,0 +1,24 @@
+{
+  "_note": "Synthetic sample clinic for the golden set. Not a real clinic. Same 'Sample Physio Clinic' as the prototype demo.",
+  "name": "Sample Physio Clinic",
+  "timezone": "Asia/Kolkata",
+  "slot_minutes": 15,
+  "sessions": [
+    {"start": "09:00", "end": "13:00"},
+    {"start": "16:00", "end": "20:00"}
+  ],
+  "closed_weekdays": ["Sunday"],
+  "booking_horizon_days": 30,
+  "default_reference_datetime": "2026-10-07T20:40:00+05:30",
+  "booked": [
+    "2026-10-08T10:00",
+    "2026-10-08T16:30",
+    "2026-10-08T17:00",
+    "2026-10-09T09:30",
+    "2026-10-09T18:00",
+    "2026-10-10T11:00",
+    "2026-10-10T16:00",
+    "2026-10-12T10:00",
+    "2026-10-14T16:30"
+  ]
+}
