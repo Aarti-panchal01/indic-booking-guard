@@ -61,6 +61,7 @@ Human in the loop: red flags (human or 108), non-booking requests (staff list), 
 | `eval/run.py` | Eval: writes `eval/RESULTS.md` and per-case `eval/RESULTS_cases.jsonl` |
 | `eval/collect.py` | Calls the real model once per case, caches to `eval/cache/*.jsonl` (committed) |
 | `eval/confirmation.py` | Ungated confirmation baseline on write failures, writes `eval/CONFIRMATION.md` |
+| `api.py` | Thin FastAPI wrapper: `POST /book` (model + guard + register), `GET /bookings`. Local only, no auth |
 | `tests/` | pytest, mock model only |
 | `prototype/` | The Oct 1 front-end demo, unchanged |
 
@@ -68,7 +69,7 @@ Human in the loop: red flags (human or 108), non-booking requests (staff list), 
 
 ```bash
 cd build
-pip install fastapi pydantic httpx dateparser pytest     # Python 3.13 used
+pip install fastapi uvicorn pydantic httpx dateparser pytest   # Python 3.13 used
 python -I -m pytest -q tests                              # mock model only, no Ollama needed
 python -I eval/run.py --offline                           # regenerate RESULTS.md from the committed model cache
 python -I eval/run.py --model mock                        # deterministic layer alone (MOCK model)
@@ -78,6 +79,9 @@ ollama pull qwen3:4b
 python -I eval/collect.py qwen3:4b                        # fills eval/cache/qwen3_4b.jsonl (~10 s per case)
 python -I eval/run.py
 python -I eval/confirmation.py
+
+# HTTP: POST /book {"utterance": "...", "reference_datetime": "2026-10-07T20:40:00+05:30"}, GET /bookings
+GUARD_MODEL=mock uvicorn api:app --port 8000              # or GUARD_MODEL=qwen3:4b (default) with Ollama running
 ```
 
 `python -I` keeps stray files in the working folder from shadowing the standard library. No API key is needed (`.env.example`).
