@@ -6,7 +6,7 @@ It resolves relative dates, day-parts and half-hours in code ("kal shaam saade c
 
 Built in one night (Oct 7 to 8 2026) on top of the `clinic-overflow-desk` front-end prototype (copied unchanged into `prototype/`).
 
-**Results in one paragraph.** 443 synthetic cases, every number vs qwen3:4b (4B, Q4). The honest numbers are the **blind** ones: each test set was written by a separate agent, committed with its sha256, and run once on a frozen guard before anyone read it. On sets written in the spec's own vocabulary the guard was strong from the start (blind: 23/24, 81/84, 47/48; 2 wrong bookings in 156). On sets written to use words the spec does not list, the first guard was not: blind wrong bookings were 1, 6 and 7, and it missed 3 of 7, 4 of 8 and 3 of 9 emergencies. Each fix of the "add the words we missed" kind was beaten by the next probe. The design change that worked was flipping the polarity: **book only if every word next to the day and time is understood or known to be harmless**. On two fresh blind probes after that change: 35/60 and 33/60 correct (raw model 16 and 21, dateparser 15 and 14), **1 and 0 wrong bookings** (raw model 14 and 7, dateparser 0 and 1). **Emergencies are the weak side**: the second of those probes missed 4 of 7, one in plain English. The dateparser baseline almost never books wrongly because it understands almost nothing (it blocked 42 of 60). **Caveat first:** all cases are AI-written and not native-speaker-audited; nothing here is a production error rate. See [Failure analysis](#failure-analysis).
+**Results in one paragraph.** 503 synthetic cases, every number vs qwen3:4b (4B, Q4). The honest numbers are the **blind** ones: each test set was written by a separate agent, committed with its sha256, and run once on a frozen guard before anyone read it. On sets written in the spec's own vocabulary the guard was strong from the start (blind: 23/24, 81/84, 47/48; 2 wrong bookings in 156). On sets written to use words the spec does not list, the first guard was not: blind wrong bookings were 1, 6 and 7, and it missed 3 of 7, 4 of 8 and 3 of 9 emergencies. Each fix of the "add the words we missed" kind was beaten by the next probe. The design change that worked was flipping the polarity: **book only if every word next to the day and time is understood or known to be harmless**. On two fresh blind probes after that change: 35/60 and 33/60 correct (raw model 16 and 21, dateparser 15 and 14), **1 and 0 wrong bookings** (raw model 14 and 7, dateparser 0 and 1). **Emergencies are the weak side**: the second of those probes missed 4 of 7, one in plain English. The dateparser baseline almost never books wrongly because it understands almost nothing (it blocked 42 of 60). **Caveat first:** all cases are AI-written and not native-speaker-audited; nothing here is a production error rate. See [Failure analysis](#failure-analysis).
 
 ## Discovery brief
 
@@ -58,7 +58,7 @@ Human in the loop: red flags (human or 108), non-booking requests (staff list), 
 | `data/golden.jsonl` | Main golden set, 156 cases (dev set: the guard was tuned on it) |
 | `data/held_out.jsonl` | Held-out v1, 24 cases, separate author, committed before the normaliser existed |
 | `data/held_out_v2.jsonl` | Held-out v2, 48 adversarial cases in the spec's vocabulary, separate author |
-| `data/oov_probe*.jsonl` | Out-of-vocabulary probes v1 to v4 (45, 50, 60, 60 cases): phrasing the spec does not list, each by a separate author |
+| `data/oov_probe*.jsonl` | Out-of-vocabulary probes v1 to v5 (45, 50, 60, 60, 60 cases): phrasing the spec does not list, each by a separate author |
 | `data/check_labels.py` | Label consistency checker (calendar, sessions, register, weekday words) |
 | `data/clinic.json` | Synthetic clinic: hours, closed day, seeded register |
 | `guard/` | schema, model interface, normaliser, red flags, guard, baselines, register |
@@ -135,7 +135,7 @@ What the ledger says:
 
 On the OOV probes v1 to v3 (dev now): correct 45/45, 34/50, 30/60, with 0 wrong bookings, 0 missed emergencies and 0 false escalations on each (`eval/OOV_RESULTS.md`, `OOV2_RESULTS.md`, `OOV3_RESULTS.md`). These are fitted numbers, shown so a reader can see the cost: on v3 the final guard asks again on half the cases.
 
-**Second model, same guard** (`eval/RESULTS_qwen25coder7b.md`, `eval/OOV*_RESULTS_qwen25coder7b.md`). qwen2.5-coder:7b was run on all 443 cases after the guard was finished; the guard was never tuned on its outputs. Totals over all seven sets, final guard:
+**Second model, same guard** (`eval/RESULTS_qwen25coder7b.md`, `eval/OOV*_RESULTS_qwen25coder7b.md`). qwen2.5-coder:7b was run on the first 443 cases (everything except OOV v5, which was written later) after the guard was finished; the guard was never tuned on its outputs. Totals over all seven sets, final guard:
 
 | | Raw model correct / wrong bookings | dateparser correct / wrong bookings | Guard correct / wrong bookings |
 |---|---|---|---|
