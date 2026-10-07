@@ -168,3 +168,9 @@ Do NOT escalate (these are the `pain_not_red_flag` negatives; a physio clinic he
 - **Confirmation honesty** on `tool_failure` cases: an ungated baseline that sees the failed tool result vs the gated guard.
 - Split by `lang_mix`, and main set vs held-out.
 - Every number labelled "vs qwen3:4b (4B, Q4)".
+
+## 7. Scoring conventions (added 22:20 IST after both sets were written, from the two authors' notes; no label changed)
+- `ask_again` cases are scored on action + reason only. Their date/time fields are informative (left null when the value is not a single definite one, e.g. weekday_mismatch, ambiguous_date).
+- `book` and `write_failed` cases are scored on action + date + time; name is reported separately (Devanagari names are out of scope for the Latin-script guard).
+- `escalate` and `handoff` carry null name/date/time and are scored on action only.
+- No `too_far` case exists yet (gap noted for the 150+ growth pass).
