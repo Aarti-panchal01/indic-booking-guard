@@ -1,0 +1,113 @@
+"""Regressions for the fixes made after the blind out-of-vocabulary probe (eval/OOV_RESULTS_blind.md).
+
+MockModel only. The utterances here are written for the tests, not copied from the probe file.
+"""
+import pytest
+
+from guard.guard import Guard
+from guard.normalise import parse
+from guard.redflags import red_flag_hits
+from guard.register import Register
+from guard.schema import Extraction, ModelResult
+
+from conftest import REF
+
+
+def decide(utterance, name="Ravi"):
+    mr = ModelResult(model="MOCK", extraction=Extraction(intent="book", patient_name=name), mock=True)
+    return Guard(Register()).decide(utterance, REF, mr)
+
+
+# ---- the dangerous path: a partial parse must never book
+@pytest.mark.parametrize("utt", [
+    pytest.param("kal shaam 6 baje ke aas paas, naam Ravi", marks=pytest.mark.xfail(
+        reason="'aas paas' as two tokens is not a hedge yet; fix after the blind OOV v2 run (guard frozen)", strict=True)),
+    "kal shaam around 6 baje, naam Ravi",
+    "naale sanje 6 gante hattira, naanu Ravi",
+    "kal subah lagbhag 10 baje, naam Ravi",
+])
+def test_unconsumed_time_modifier_never_books(utt):
+    d = decide(utt)
+    assert d.action == "ask_again" and d.reason == "ambiguous_time", (d.action, d.reason, d.trace)
+    assert not d.confirmed
+
+
+@pytest.mark.parametrize("utt,date,time", [
+    ("tomorrow half past five pm, Ravi here", "2026-10-08", "17:30"),
+    ("kal shaam half past six baje, naam Ravi", "2026-10-08", "18:30"),   # before the fix: 18:00
+    ("quarter past 10 on Friday, name is Ravi", "2026-10-09", "10:15"),
+    ("quarter to six tomorrow evening, this is Ravi", "2026-10-08", "17:45"),
+    ("kal shaam chhe baj ke tees minute, naam Ravi", "2026-10-08", "18:30"),
+    ("Monday 1745 hours, patient Ravi", "2026-10-12", "17:45"),
+    ("Friday at 11 in the morning, this is Ravi", "2026-10-09", "11:00"),
+])
+def test_english_and_minute_forms(utt, date, time):
+    d = decide(utt)
+    assert (d.action, d.date, d.time) == ("book", date, time), d.trace
+
+
+@pytest.mark.parametrize("utt,date", [
+    ("solah tareekh ko shaam 6 baje, naam Ravi", "2026-10-16"),
+    ("hadinaaru tareeku sanje aaru gantege, nanna hesaru Ravi", "2026-10-16"),
+    ("the sixteenth, 6 in the evening, Ravi here", "2026-10-16"),
+    ("ek hafte baad shaam 6 baje, naam Ravi", "2026-10-14"),
+    ("ondu vaarada nantara sanje 6 gantege, naanu Ravi", "2026-10-14"),
+    ("one week from today at 6 pm, Ravi", "2026-10-14"),
+])
+def test_word_dates_and_spans(utt, date):
+    d = decide(utt)
+    assert (d.action, d.date, d.time) == ("book", date, "18:00"), d.trace
+
+
+def test_next_to_next_day():
+    d = decide("next to next day evening 7 baje, Ravi")
+    assert (d.action, d.date, d.time) == ("book", "2026-10-09", "19:00"), d.trace
+
+
+def test_word_date_with_wrong_weekday_is_caught():
+    # the blind wrong write: the date was not recognised, so the weekday check never ran
+    d = decide("Friday, solah October, subah 11 baje, Ravi")   # Oct 16 is a Friday -> ok
+    assert (d.action, d.date) == ("book", "2026-10-16")
+    d = decide("Thursday, solah October, subah 11 baje, Ravi")
+    assert (d.action, d.reason) == ("ask_again", "weekday_mismatch")
+
+
+def test_span_far_away_is_too_far():
+    d = decide("chhe hafte baad shaam 6 baje, naam Ravi")
+    assert (d.action, d.reason) == ("ask_again", "too_far")
+
+
+def test_symptom_history_is_not_a_span():
+    p = parse("do hafte se ghutne mein dard hai, kal shaam 6 baje")
+    assert [x.words for x in p.days] == ["kal"]
+
+
+def test_number_word_before_date_is_not_a_date():
+    assert parse("do date bata dijiye").days == []
+
+
+def test_alternative_days_are_ambiguous():
+    d = decide("Thursday ya Friday, shaam 6 baje, naam Ravi")
+    assert (d.action, d.reason) == ("ask_again", "ambiguous_date")
+
+
+@pytest.mark.parametrize("utt", [
+    "dil mein bahut dard ho raha hai, kal ka time chahiye",
+    "edeyalli tumba uri ide, naale bartini",
+    "chest alli novu, naale sanje",
+    "seene mein jalan aur paseena aa raha hai",
+    "left arm pain and sweating since morning",
+    "achanak bahut tez sar dard shuru hua, kal aana hai",
+    "achanakkaagi tumba tale novu, naale beligge",
+])
+def test_red_flag_paraphrases(utt):
+    assert red_flag_hits(utt), utt
+
+
+@pytest.mark.parametrize("utt", [
+    "kandhe mein dard hai, frozen shoulder, kal shaam 6 baje",
+    "sar dard rehta hai kabhi kabhi, kal aana hai",          # not sudden, not severe
+    "chest physiotherapy ke liye kal aana hai",
+])
+def test_red_flag_negatives_still_quiet(utt):
+    assert not red_flag_hits(utt), utt
