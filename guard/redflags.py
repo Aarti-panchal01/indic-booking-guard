@@ -37,14 +37,14 @@ RED_FLAGS: list[tuple[str, str]] = [
     # "achanakkaagi bhayankara tale novu"). Body part x symptom within a few words instead of fixed phrases.
     ("chest_pain", r"\b(?:dil|heart|seene|seena|sine|chhati|chhaati|chaati|chati|chest|ede|edeyalli|edeli|edenalli|yede|yedeyalli)"
                    r"(?: \w+){0,2} (?:dard|pain|paining|novu|nov|jalan|urita|uri|bhaari|bhaaripan|bhaara|bhara|dabav|jakdan|"
-                   r"tight|tightness|heavy|heaviness|pressure|dabaav|dabaw|hidi\w*|squeez\w*)"),
+                   r"tight|tightness|heavy|heaviness|pressure|dabaav|dabaw|hidi\w*|squeez\w*|bojh|boj|weight|patthar|tondare|tondre|kashta)"),
     # Added after the blind OOV v2 probe (4/8 emergencies missed): mouth/face + crooked, speech failing,
     # loss of consciousness. Same body-part x sign shape.
     ("face_droop", r"\b(?:bayi|baayi|baai|munh|muh|mooh|mukha|chehra|chehera|face|hont|lips?|mouth)(?: \w+){0,2} "
                    r"(?:vakra|vakara|tedha|tedhi|tedhe|sotta|sottagide|latak\w*|jhuk\w*|droop\w*|crooked|slant\w*)"),
     ("speech", r"\b(?:maatu|maathu|maat)(?: \w+){0,2} (?:baralla|bartilla|barta illa|barthilla|aagtilla|aagta illa)"
                r"|\b(?:bol|bolne|baat|awaaz|aawaz|zubaan|zabaan|words?|speech)(?: \w+){0,2} (?:nahi (?:pa|ho|nikal)\w*|ladkhad\w*|atak\w*|slur\w*|not coming|jumbled)"),
-    ("faint", r"\bhosh (?:nahi|nahin|kho|mein nahi|me nahi|chala)|\bunconscious|\bblack(?:ed)? out|\bbehosh"),
+    ("faint", r"\bhosh (?:nahi|nahin|kho|mein nahi|me nahi|chala)|\bunconscious|\bblack(?:ed)? out|\bbehosh|\bbeshudh|\bbehoshi"),
     ("headache", r"\b(?:achanak|achanakkaagi|achanakagi|sudden|suddenly|ekdum|bhayankara|bhayankar|tumba jaasti|worst)"
                  r"(?: \w+){0,3} (?:sar ?dard|sir ?dard|tale ?novu|headache)"),
     # Devanagari: the date normaliser is Latin-script only, but a missed emergency is not acceptable
@@ -70,10 +70,14 @@ NOT_SYMPTOM = re.compile(r"chest (?:physio|physiotherapy|therapy|exercise)|breat
 # "nahi"/"theek" ("hospital nahi gaye", "theek nahi lag raha", "not going away") does NOT negate.
 NEGATION_AFTER = re.compile(
     r"^\W*(?:nahi|nahin|nai|illa|not)\b(?!\W*(?:gaye|gayi|gaya|ja|jaa|jaata|jata|jaati|ruk|rukta|rukti|lag|going|stopping|kam|hua|hoti|hota|horahi|hogide|aagta|aagtilla))"
-    r"|^\W*(?:\w+\W+){0,1}(?:tha|thi|ittu|was there)\W+(?:\w+\W+){0,2}(?:ab|eega|now)\W+(?:\w+\W+){0,1}(?:theek|thik|fine|ok|illa|nahi|gone)\b",
+    r"|^\W*(?:\w+\W+){0,1}(?:tha|thi|ittu|was there)\W+(?:\w+\W+){0,2}(?:ab|eega|ega|now)\W+(?:\w+\W+){0,1}(?:theek|thik|fine|ok|illa|nahi|gone|sari\w*|normal)\b"
+    # long past (a week or more), added after blind OOV v3: "fainted about a month back", not "aadha ghanta pehle"
+    r"|^\W*(?:\w+\W+){0,4}(?:month|months|year|years|saal|mahine|mahina|varsha|weeks|hafte)\W+(?:back|ago|pehle|hinde)\b",
     re.I,
 )
 NEGATION_BEFORE = re.compile(r"\b(?:no|not|never|koi|without|bina)\W+(?:\w+\W+){0,1}$", re.I)
+PAST_BEFORE = re.compile(r"\b(?:last year|pichhle saal|pichle saal|hindina varsha|kaleda varsha|years ago|months ago|"
+                         r"last month|pichhle mahine|pichle mahine)\W+(?:\w+\W+){0,3}$", re.I)
 
 
 def red_flag_hits(text: str) -> list[str]:
@@ -85,7 +89,8 @@ def red_flag_hits(text: str) -> list[str]:
         for m in re.finditer(pat, s):
             after = s[m.end(): m.end() + 30]
             before = s[max(0, m.start() - 20): m.start()]
-            if NEGATION_AFTER.search(after) or NEGATION_BEFORE.search(before):
+            if NEGATION_AFTER.search(after) or NEGATION_BEFORE.search(before) or \
+                    PAST_BEFORE.search(s[max(0, m.start() - 45): m.start()]):
                 continue
             hits.append(sign)
             break

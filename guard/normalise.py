@@ -114,6 +114,45 @@ POST_QUALIFIERS = {"baad", "pehle", "tak", "se", "nantara", "mele", "olage", "mo
                    "onwards", "ish", "plus", "minus", "thoda", "swalpa"}
 OFFSET_WORDS = {"pehle", "baad", "earlier", "later", "before", "after", "munche", "modalu", "nantara", "mele"}
 NOT_MINUTES = {"ek", "do", "sat", "aru", "ent", "che", "rat", "ath", "mur", "a", "one"}
+
+# ---------------------------------------------------------------- allowlist window (after blind OOV v3)
+# Three blind probes beat every blocklist of "dangerous modifier" words. The polarity is flipped here:
+# before a write, every token within WINDOW of the chosen day and time must be consumed by the parser,
+# part of the patient's name, or in KNOWN (words that cannot change a day or a time). Anything else
+# means we may have understood only part of what was said -> ask again. Numbers are never KNOWN.
+WINDOW = 2
+KNOWN = {
+    # read by the parser through lookaround (not marked consumed)
+    # (NEXT_WORDS / WEEK_WORDS are NOT here: they are harmless only when the parser consumed them)
+    *DAYPARTS, *TIME_UNITS, *AMPM, *DATE_MARKERS, *MONTHS, "din", "dina",
+    # body parts and symptoms (red flags are handled before this point; here they cannot change a slot)
+    "dard", "novu", "pain", "kamar", "sonta", "mandi", "ghutne", "ghutna", "kandha", "kandhe", "gardan", "kutthige",
+    "haath", "hath", "kai", "bhuja", "back", "knee", "neck", "shoulder", "ankle", "wrist", "hip", "seene", "chest",
+    "jhunjhuni", "tingling", "sore", "stiff", "bandide", "jam", "gaya", "gayi", "sirf", "bas", "kooda", "bhi",
+    "waise", "andre", "bandre", "which", "do", "le", "lena", "wait", "no", "sorry", "also", "only", "bahut",
+    "ee", "month", "inda", "from", "ye", "yeh", "woh", "wo",
+    # grammar: postpositions, particles, articles, pronouns, copulas
+    "ko", "ke", "ka", "ki", "ge", "ige", "kke", "ke liye", "liye", "alli", "mein", "me", "mai", "par", "pe", "se",
+    "at", "on", "in", "for", "the", "an", "to", "of", "is", "am", "are", "be", "this", "that", "it", "i", "me", "my",
+    "we", "you", "your", "mera", "meri", "mere", "mujhe", "hum", "humko", "unka", "unki", "unke", "uska", "nanna",
+    "nange", "naanu", "avaru", "avara", "amma", "appa", "papa", "mummy", "maa", "and", "aur", "mattu", "toh", "to",
+    "hai", "hain", "hoon", "hu", "ho", "tha", "thi", "ide", "idhe", "agide", "alva", "na", "naa", "ri",
+    # booking verbs and nouns
+    "appointment", "slot", "time", "book", "booking", "session", "physio", "visit", "chahiye", "chaiye", "beku",
+    "bekittu", "bartini", "barthini", "bartivi", "barthivi", "barteeni", "baruve", "barbeku", "baralaa", "baralla",
+    "aana", "aaunga", "aaungi", "aa", "aayenge", "jaunga", "jaungi", "sakta", "sakti", "sakte", "milega", "milegi",
+    "mil", "jayega", "jaayega", "dedo", "de", "dijiye", "dena", "karo", "kar", "karna", "kariye", "maadi", "kodi",
+    "sigatta", "sigutta", "can", "could", "would", "like", "want", "need", "come", "get", "have", "take", "fix",
+    "please", "pls", "kindly", "dayavittu", "swalpa", "thank", "thanks", "confirm",
+    # name introductions
+    "naam", "name", "hesaru", "bol", "raha", "rahi", "here", "speaking", "patient", "this", "is",
+    # politeness and fillers
+    "haan", "ha", "ji", "accha", "acha", "ok", "okay", "theek", "thik", "sir", "madam", "maam", "bhaiya", "hello",
+    "hi", "namaste", "namaskara", "um", "umm", "uh", "hmm", "matlab", "arre", "yes", "yeah", "haudu", "sari",
+    "doctor", "dr", "<damaged>",
+}
+# correction markers are handled by "last value wins"; what follows them is checked separately
+CORRECTION_TAIL = 8
 COUNTED_UNITS = DAY_UNIT | WEEK_WORDS | {"saal", "mahine", "mahina", "month", "months", "year", "years", "varsha",
                                          "log", "people", "baar", "times", "sessions", "session"}
 CORRECTION_MARKERS = {"nahi", "nahin", "nai", "alla", "illa", "beda", "sorry", "matlab", "actually", "balki", "rather"}
@@ -181,6 +220,8 @@ class Parse:
     tokens: list[str] = field(default_factory=list)
     hedges: list[str] = field(default_factory=list)       # unconsumed time modifiers next to a time
     alternatives: bool = False                              # "Thursday ya Friday"
+    used: set[int] = field(default_factory=set)            # token indices consumed by a day or time expression
+    clause_starts: list[int] = field(default_factory=list)  # token index where each , . ? ! ; clause starts
 
 
 def _num(tok: str) -> Optional[int]:
@@ -242,8 +283,12 @@ def parse(text: str) -> Parse:
                 kind = "nextweek_weekday"
             elif nxt in NEXT_WORDS and nxt2 in WEEK_WORDS:
                 kind = "nextweek_weekday"
-            elif prev in NEXT_WORDS or (prev in ("wala", "vala", "waala") and prev2 in NEXT_WORDS):
+            elif prev in NEXT_WORDS or (prev in ("wala", "vala", "waala", "wale", "waale") and prev2 in NEXT_WORDS):
                 kind = "next_weekday"
+            if kind != "weekday":
+                # mark the "agle hafte" / "next week" words this weekday used, so the allowlist window
+                # can tell them apart from an unused "agle" ("kal ke agle din" must not pass as "kal")
+                used.update(i for i in range(max(0, k - 3), min(n, k + 3)) if toks[i] in NEXT_WORDS | WEEK_WORDS | {"ke", "ka", "ki", "da", "de", "wala", "vala", "waala"})
             p.days.append(DayExpr(k, kind, wd, words=t)); used.add(k); continue
     # explicit dates: "10 tareekh", "9th", "october 9", "9 october", "9 ne tareeku"
     for k, t in enumerate(toks):
@@ -251,6 +296,11 @@ def parse(text: str) -> Parse:
             continue
         nxt = at(k + 1)
         nxt2 = at(k + 2)
+        # "second Monday of November", "pehla shanivar": an ordinal before a weekday is not a day of the month
+        if t in ORDINALS and (nxt in WEEKDAY_OF or nxt2 in WEEKDAY_OF):
+            p.alternatives = True  # reported as ambiguous_date
+            used.add(k)
+            continue
         if t in ORDINALS or (t in ("twenty", "thirty") and nxt in ORDINALS and ORDINALS[nxt] < 10):
             val, end = (ORDINALS[t], k + 1) if t in ORDINALS else (DAY_WORDS[t] + ORDINALS[nxt], k + 2)
             month = MONTHS.get(at(end)) or (MONTHS.get(at(end + 1)) if at(end) == "of" else None) or MONTHS.get(at(k - 1))
@@ -391,7 +441,45 @@ def parse(text: str) -> Parse:
         between = toks[a.pos + len(a.words.split()): b.pos]
         if len(between) <= 2 and any(w in ("ya", "or", "athava", "illandre", "leda") for w in between):
             p.alternatives = True
+    p.used = used
+    p.clause_starts = _clause_starts(text, toks)
     return p
+
+
+def _clause_starts(text: str, toks: list[str]) -> list[int]:
+    """Token index of each clause start, by tokenizing each punctuation-separated piece on its own.
+    If the pieces do not add up to the same tokens (a rewrite crossed a boundary), return [0]."""
+    pieces = [s for s in re.split(r"[,.?!;]+(?:\s|$)", text) if s.strip()]
+    starts, out = 0, []
+    for piece in pieces:
+        out.append(starts)
+        starts += len(tokenize(piece))
+    joined = [t for piece in pieces for t in tokenize(piece)]
+    return out if joined == toks else [0]
+
+
+def unknown_near(p: Parse, spans: list[tuple[int, int]], name_tokens: set[str]) -> list[str]:
+    """Tokens within WINDOW of the chosen day/time spans, or after a correction that follows the last
+    time, that are not consumed, not the name, and not KNOWN. Empty list = the write may go ahead."""
+    toks, n = p.tokens, len(p.tokens)
+    inside = set(p.used) | {i for s, e in spans for i in range(s, e)}
+    # look back only within the clause ("neck pain from desk work, kal shaam 4 baje": 'work' is narrative);
+    # look ahead across clauses ("naale nahi, uske agle din" must still be seen)
+    starts = [c for c in p.clause_starts if c <= min((s for s, _ in spans), default=0)]
+    floor = max(starts, default=0)
+    near = {i for s, e in spans for i in range(max(floor, s - WINDOW), min(n, e + WINDOW))}
+    if spans:
+        last_end = max(e for _, e in spans)
+        for c in p.corrections:
+            if c >= last_end - 1:
+                near |= set(range(c + 1, min(n, c + 1 + CORRECTION_TAIL)))
+    out = []
+    for i in sorted(near):
+        w = toks[i]
+        if i in inside or w in name_tokens or w in KNOWN or w in CORRECTION_MARKERS:
+            continue
+        out.append(w)
+    return out
 
 
 def _count(tok: str) -> Optional[int]:

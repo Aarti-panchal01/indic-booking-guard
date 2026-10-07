@@ -14,7 +14,7 @@ from typing import Optional
 
 from .baselines import dateparse_words
 from .normalise import (DAYPARTS, FRAC_POST, FRAC_PRE, FRAC_WHOLE, HEDGES, NUM_WORDS, RELATIVE, TIME_UNITS, WEEKDAY_OF,
-                        DayExpr, Parse, parse, resolve_day, resolve_time, weekday_conflict)
+                        WINDOW, DayExpr, Parse, parse, resolve_day, resolve_time, tokenize, unknown_near, weekday_conflict)
 from .redflags import red_flag_hits
 from .register import Register, RegisterWriteError
 from .schema import REASON_PRIORITY, Decision, ModelResult
@@ -180,17 +180,20 @@ class Guard:
         # and only if the caller actually said them: in G112 the model invented "Wednesday" for a
         # caller who gave no day, and the fallback booked it.
         ex = mr.extraction
+        fallback_words: set[str] = set()  # verbatim words the fallback resolved (checked in the transcript)
         if ex and ex.date_words and not _said(ex.date_words, utterance):
             trace.append(f"model date words '{ex.date_words}' not in transcript: ignored")
         elif (d is None and anchor is None) and ex and ex.date_words:
             dp = dateparse_words(ex.date_words, ref_naive)
             if dp:
                 d = dp.date(); trace.append(f"dateparser fallback on '{ex.date_words}' -> {d}")
+                fallback_words |= set(tokenize(ex.date_words))
         if (hm is None and not p.times and ex and ex.time_words and _said(ex.time_words, utterance)
                 and not HEDGES & set(ex.time_words.lower().split())):
             dp = dateparse_words(ex.time_words, ref_naive)
             if dp and (dp.hour or dp.minute):
                 hm = (dp.hour, dp.minute); trace.append(f"dateparser fallback on '{ex.time_words}' -> {hm}")
+                fallback_words |= set(tokenize(ex.time_words))
 
         if ex and ex.date and d and ex.date != d.isoformat():
             trace.append(f"model said {ex.date}; guard resolved {d} (guard wins)")
@@ -233,7 +236,19 @@ class Guard:
             return Decision(action="ask_again", reason=reason, name=name, date=ds, time=ts,
                             say=f"Sorry, I need to check that again ({reason.replace('_', ' ')}).", trace=trace)
 
-        # 5. the write, then the confirmation gate
+        # 5. last gate before the write: did we understand every word around the day and the time?
+        spans = [(e.pos, e.pos + len(e.words.split())) for e in ([anchor] if anchor else []) + p.times[-1:]]
+        unknown = unknown_near(p, spans, set((name or "").lower().split()) | fallback_words)
+        if unknown:
+            time_side = bool(p.times) and any(
+                abs(i - p.times[-1].pos) <= WINDOW + len(p.times[-1].words.split())
+                for i, w in enumerate(p.tokens) if w in unknown)
+            reason = "ambiguous_time" if time_side or not anchor else "ambiguous_date"
+            trace.append(f"allowlist window: unrecognised words {unknown} next to the day/time -> {reason}")
+            return Decision(action="ask_again", reason=reason, name=name, date=ds, time=ts,
+                            say=f"Sorry, I need to check that again ({reason.replace('_', ' ')}).", trace=trace)
+
+        # 6. the write, then the confirmation gate
         try:
             self.register.book(d, time(*hm), name, source="guard")
         except RegisterWriteError as e:

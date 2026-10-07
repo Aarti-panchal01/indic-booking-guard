@@ -128,8 +128,6 @@ def test_leftover_number_or_offset_never_books(utt):
 
 @pytest.mark.parametrize("utt,date,time", [
     ("3 din pehle gir gayi thi, kal shaam 6 baje aana hai, naam Ravi", "2026-10-08", "18:00"),   # 'pehle' is history
-    ("kal shaam 6 baje, naam Ravi, nahi nahi, Ravi Kumar", "2026-10-08", "18:00"),               # name correction
-    ("kal shaam 6 baje 2 hafte pehle wala dard, naam Ravi", "2026-10-08", "18:00"),
 ])
 def test_history_and_name_corrections_still_book(utt, date, time):
     d = decide(utt)
@@ -151,3 +149,32 @@ def test_unparsed_english_time_words_ask_not_book():
     # "six" is not marked as a time here, so nothing is parsed: safe (missing_time), never a booking
     d = decide("tomorrow at six fifteen pm, Ravi")
     assert d.action == "ask_again" and not d.confirmed
+
+
+@pytest.mark.parametrize("utt", [
+    "kal shaam 6 baje, naam Ravi, nahi nahi, Ravi Kumar",    # a correction after the time: we cannot tell what changed
+    "kal shaam 6 baje 2 hafte pehle wala dard, naam Ravi",   # a number glued to the time
+])
+def test_allowlist_known_costs_ask_again(utt):
+    # Accepted costs of the allowlist window (README failure analysis): safe, but one more question for the caller.
+    d = decide(utt)
+    assert d.action == "ask_again" and not d.confirmed
+
+
+# ---- after the blind OOV v3 probe: allowlist window (own phrasings of the failure shapes)
+@pytest.mark.parametrize("utt", [
+    "kal ke agle din shaam 6 baje, naam Ravi",                  # 'agle' not consumed -> not plain 'kal'
+    "is mahine ka aakhri shanivar subah 10 baje, naam Ravi",    # unknown qualifier on the weekday
+    "October ka third Friday, subah 10 baje, naam Ravi",        # ordinal + weekday is not a day of the month
+    "Friday 10 am but push it a bit, Ravi here",                # unknown words after the time
+    "naale sanje aaru ippattaidu ge, nanna hesaru Ravi",        # unknown minute word
+    "Friday subah 10 baje, nahi nahi usse thoda late, naam Ravi",  # correction tail
+])
+def test_unknown_words_near_day_or_time_never_book(utt):
+    d = decide(utt)
+    assert d.action == "ask_again" and not d.confirmed, d.trace
+
+
+def test_narrative_before_the_clause_does_not_block():
+    d = decide("gym mein shoulder strain ho gaya pichhle mahine, kal shaam 6 baje, naam Ravi")
+    assert (d.action, d.date, d.time) == ("book", "2026-10-08", "18:00"), d.trace
