@@ -33,6 +33,13 @@ RED_FLAGS: list[tuple[str, str]] = [
     ("speech", r"\bbolne (?:me|mein|mai) (?:dikkat|takleef|problem)|\bzabaan (?:ladkhada|ladkhadaa|lad khada)|\bslurred speech|\bcan'?t speak|\bmaatad(?:oke|ok|alu) (?:aagtilla|agtilla|aagta illa|aagtha illa)"),
     ("vision", r"\bachanak (?:dikhna|dikhai) band|\bsudden(?:ly)? (?:can'?t see|blurr?ed vision|vision loss)|\bkann?u kaanistilla"),
     ("headache", r"\b(?:bahut )?tez sa?i?r ?dard|\bsevere headache|\btumba tale ?novu|\bjor(?:dar)? sar dard"),
+    # Devanagari: the date normaliser is Latin-script only, but a missed emergency is not acceptable
+    ("chest_pain", r"(?:सीने|सीना|छाती) (?:में )?(?:दर्द|भारीपन)"),
+    ("breathing", r"सांस (?:लेने )?(?:में )?(?:तकलीफ|दिक्कत)|साँस (?:लेने )?(?:में )?(?:तकलीफ|दिक्कत)|सांस फूल"),
+    ("cold_sweat", r"ठंडा पसीना"),
+    ("face_droop", r"(?:चेहरा|मुंह) (?:टेढ़ा|टेढा)"),
+    ("speech", r"बोलने में (?:दिक्कत|तकलीफ)"),
+    ("faint", r"बेहोश"),
     ("faint", r"\bbehosh|\bbehos\b|\bfainted\b|\bpass(?:ed)? out\b|\bprajne tapp|\bpraj[nñ]e illa|\bkuSidu biddru|\bgir (?:gaye|gayi|pade) .*behosh"),
 ]
 
