@@ -135,14 +135,14 @@ What the ledger says:
 
 On the OOV probes v1 to v3 (dev now): correct 45/45, 34/50, 30/60, with 0 wrong bookings, 0 missed emergencies and 0 false escalations on each (`eval/OOV_RESULTS.md`, `OOV2_RESULTS.md`, `OOV3_RESULTS.md`). These are fitted numbers, shown so a reader can see the cost: on v3 the final guard asks again on half the cases.
 
-**Second model, same guard** (`eval/RESULTS_qwen25coder7b.md`, `eval/OOV*_RESULTS_qwen25coder7b.md`). qwen2.5-coder:7b was run on the first 443 cases (everything except OOV v5, which was written later) after the guard was finished; the guard was never tuned on its outputs. Totals over all seven sets, final guard:
+**Second model, same guard** (`eval/RESULTS_qwen25coder7b.md`, `eval/OOV*_RESULTS_qwen25coder7b.md`). qwen2.5-coder:7b was run on all 503 cases after the guard was finished; the guard was never tuned on its outputs. Totals over all eight sets, final guard (dev and blind sets together, so the guard columns are partly fitted):
 
 | | Raw model correct / wrong bookings | dateparser correct / wrong bookings | Guard correct / wrong bookings |
 |---|---|---|---|
-| qwen3:4b (tuned with) | 106 / 121 | 86 / 8 | 368 / 1 |
-| qwen2.5-coder:7b (unseen) | 120 / 108 | 89 / 9 | 352 / 1 |
+| qwen3:4b (tuned with) | 127 / 128 | 100 / 9 | 401 / 1 |
+| qwen2.5-coder:7b (unseen) | 141 / 116 | 106 / 9 | 388 / 1 |
 
-The one wrong booking left is the same case (OOV v4 S001) for both models. The second model found one new guard bug before this table: on held-out v2 it returned the caller's doctor ("Dr. Menon ge hinde torisidde") as the patient, and the guard booked under that name. Same lesson as H024 (the name was in the transcript, in the wrong role); fixed with a doctor-title check and a test, and qwen3's numbers did not change. The cost of a model the guard was not tuned with shows up as asking again more: main set false blocks 6/70 against 2/70, because qwen2.5 labels intents and names differently. qwen2.5's own `red_flag` also fired on two non-emergencies, and the guard escalates on either signal, so it inherited 1 false escalation on OOV v3 and 1 on v4.
+The one wrong booking left is the same case (OOV v4 S001) for both models. The second model found one new guard bug before this table: on held-out v2 it returned the caller's doctor ("Dr. Menon ge hinde torisidde") as the patient, and the guard booked under that name. Same lesson as H024 (the name was in the transcript, in the wrong role); fixed with a doctor-title check and a test, and qwen3's numbers did not change. The cost of a model the guard was not tuned with shows up as asking again more: main set false blocks 6/70 against 2/70, because qwen2.5 labels intents and names differently. qwen2.5's own `red_flag` also fired on two non-emergencies, and the guard escalates on either signal, so it inherited false escalations: 1 on OOV v3, 1 on v4 and 5 on v5 (against 3 with qwen3 on v5).
 
 **Confirmation honesty on write failures** (`eval/CONFIRMATION.md`, hand check in `eval/CONFIRMATION_HANDCHECK.md`). The ungated model sees an explicit tool error and writes its own reply (8 cases x 3 error types = 24 replies). It **never explicitly claimed the booking was done** (0/24; 1 ambiguous). That part of the hypothesis is not supported at this setting. The free-text replies failed in other ways: English to 21/21 non-English callers, a wrong weekday or date for the slot 3/24 ("Wednesday the 13th of October" for a Tuesday), an invented clinic phone number 2/24, and "try again later" 23/24. The guard replies with fixed text and sets `confirmed=True` only after a successful write (tested in `tests/test_confirmation_gate.py`). **Its fixed text is English-only today**, which is the same language problem; see the roadmap.
 
@@ -156,7 +156,7 @@ The one wrong booking left is the same case (OOV v4 S001) for both models. The s
 - Date right 17/45. The dominant error is **returning today's date** when the caller meant another day (20/45), for example for "kal" or "naale". Others: null (3), off by -5, -1 or +2 days (5).
 - Time right 10/45. Null 11, am/pm flipped 5 ("parson sham ko 4.30 baje" as 04:30), right hour but wrong minutes 4 (saade/paune/vare arithmetic), other wrong 14.
 - Names right 43/45. So the guard keeps the model for names and intent and takes dates and times from the caller's words.
-- Red flags: the model's own `red_flag` misses most Hinglish and Kannada chest-pain and breathlessness phrasings. Across the seven blind runs it caught 21 of 50 emergencies (best single run 5 of 9).
+- Red flags: the model's own `red_flag` misses most Hinglish and Kannada chest-pain and breathlessness phrasings. Across the eight blind runs it caught 23 of 57 emergencies (best single run 5 of 9).
 
 **2. Why dateparser does not rescue it.** It resolves English ("tomorrow at 4 pm") but returns nothing for "kal", "naale", "saade chaar" or "sanje". It almost never books wrongly (0 to 4 per set), because it blocks nearly every good booking too (87% to 91% false blocks on the labelled sets). In a deployment that means a human calls back on nearly every Indic call. It is the right baseline to beat on safety, and the guard only matched it after the allowlist change.
 
