@@ -2,7 +2,7 @@
 
 A deterministic guard that sits between a voice agent's language model and a clinic booking, for callers who speak Hinglish, Kannada-English or English.
 
-**Live demo:** LIVE_URL (synthetic data only). Try `kal shaam sawa paanch baje appointment chahiye, naam Ramesh`, then `parso ke do din baad subah das baje, naam Lalita`.
+**Live demo:** https://indic-booking-guard.vercel.app (synthetic data only). Try `kal shaam sawa paanch baje appointment chahiye, naam Ramesh`, then `parso ke do din baad subah das baje, naam Lalita`.
 
 **The problem.** LLM voice agents get booking dates wrong, often by a day, even on frontier models. The usual fix, resolving dates in code with dateparser, returns nothing for Hinglish or Kannada-English ("kal shaam saade chaar baje", "naale sanje naalku gante"). And a booking agent must not book a caller who is describing a heart attack or a stroke.
 

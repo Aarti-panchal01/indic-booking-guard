@@ -133,8 +133,12 @@ def card(dec: Decision, model_error: Optional[str]) -> dict:
     out = {"label": label, "action": dec.action, "tier": dec.tier, "reason": dec.reason, "date": dec.date,
            "time": dec.time, "name": dec.name, "confirmed": dec.confirmed, "say": dec.say, "why": why, "checks": checks}
     if model_error:
-        out["model_note"] = ("The language model was busy (free-tier limit), so the guard ran on your words alone."
-                             if "rate_limited" in model_error else "The language model did not answer, so the guard ran on your words alone.")
+        if "rate_limited" in model_error:
+            out["model_note"] = "The language model was busy (free-tier limit), so the guard ran on your words alone."
+        elif model_error.startswith(("json_error", "schema_error")):
+            out["model_note"] = "The language model's answer could not be used, so the guard ran on your words alone."
+        else:
+            out["model_note"] = "The language model did not answer in time, so the guard ran on your words alone."
     return out
 
 
@@ -145,6 +149,8 @@ class CheckRequest(BaseModel):
 def create_app(model=None, register: Optional[Register] = None, limiter: Optional[RateLimiter] = None) -> FastAPI:
     app = FastAPI(title="Indic booking guard (demo)")
     app.state.model = model or model_from_spec(default_model_spec())
+    if hasattr(app.state.model, "max_retries"):  # keep one request well inside a serverless time limit
+        app.state.model.max_retries, app.state.model.max_wait_s = 2, 4.0
     app.state.register = register or demo_register()
     app.state.limiter = limiter or RateLimiter()
     lock = threading.Lock()  # one guard decision (check + write) at a time on the shared register
