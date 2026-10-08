@@ -121,6 +121,42 @@ def choose_anchor(p: Parse) -> Optional[DayExpr]:
     return last_c
 
 
+STACK_CORRECTIONS = {"no", "wait", "sorry", "actually", "instead", "rather", "nahi", "nahin", "nai", "alla", "illa",
+                     "beda", "matlab", "balki", "mean", "change"}
+
+
+def _is_offset(e: DayExpr) -> bool:
+    """'3 din baad', 'ek hafte baad', 'after 2 days', 'in a week', 'one week from today' (not 'day after tomorrow')."""
+    return e.kind == "relative" and len(e.words.split()) > 1 and e.words not in ("day after tomorrow", "next to next day")
+
+
+def stacked_days(p: Parse, ref_d: date) -> Optional[str]:
+    """Two concrete day expressions that point to different dates with no correction between them
+    ("parso ke do din baad"): ask again, never compute or pick one (TAXONOMY 3.1, added Oct 8 after blind OOV v5
+    booked "parso ke do din baad" on Friday instead of asking)."""
+    t = p.tokens
+    # "kal se teen din baad": the parser drops "kal se" (usually "since yesterday"), but right before an offset it is a chain
+    for e in p.days:
+        if _is_offset(e) and e.pos >= 2 and RELATIVE.get(t[e.pos - 2], 0) != 0 and t[e.pos - 1] in ("se", "inda", "ninda", "from"):
+            return f"'{t[e.pos - 2]} {t[e.pos - 1]}' then '{e.words}' (chained offset)"
+    # "since about the 3rd", "from the 2nd": a day in the caller's history, not a booking day
+    concrete = [e for e in p.days if e.kind in ("relative", "date")
+                and not {"since", "from"} & set(t[max(0, e.pos - 3): e.pos])]
+    for a, b in zip(concrete, concrete[1:]):
+        if any(a.pos < c < b.pos for c in p.corrections) or STACK_CORRECTIONS & set(t[a.pos + 1: b.pos]):
+            continue
+        # "aaj se teen din baad", "from today 3 days": today is the base of the offset, not a second day
+        if a.kind == "relative" and a.value == 0 and a.pos + 1 < len(t) and t[a.pos + 1] in ("se", "from", "inda", "ninda"):
+            continue
+        da, db = resolve_day(a, ref_d)[0], resolve_day(b, ref_d)[0]
+        # an offset ("do din baad", "after 2 days") after another day word is chained to it, even when the
+        # arithmetic happens to match ("parso ke do din baad": parso = +2 and "do din baad" = +2)
+        chained = _is_offset(b) and a.words != b.words
+        if da != db or chained:
+            return f"'{a.words}' then '{b.words}' with no correction between"
+    return None
+
+
 class Guard:
     def __init__(self, register: Register):
         self.register = register
@@ -172,6 +208,11 @@ class Guard:
                 bad = weekday_conflict(p, anchor, d)
                 if bad:
                     problems["weekday_mismatch"] = f"'{bad.words}' vs {d.strftime('%A %Y-%m-%d')}"
+        stacked = stacked_days(p, ref_d)
+        if stacked:
+            problems["ambiguous_date"] = stacked
+            d = None
+            trace.append(f"stacked day expressions: {stacked} -> ambiguous_date")
         if p.times:
             te = p.times[-1]
             hm, prob = resolve_time(te, self._in_session)
