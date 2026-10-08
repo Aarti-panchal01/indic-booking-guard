@@ -23,6 +23,7 @@ RUNS = [  # (label, guard commit, per-case file, case filter)
     ("OOV probe v3", "2f4b7be", "OOV3_RESULTS_blind_cases.jsonl", lambda r: True),
     ("OOV probe v4, after the allowlist change", "0a55b09", "OOV4_RESULTS_blind_cases.jsonl", lambda r: True),
     ("OOV probe v5, second run of the allowlist guard", "5903181", "OOV5_RESULTS_blind_cases.jsonl", lambda r: True),
+    ("OOV probe v6, after the red-flag and stacked-day fix (18 emergencies)", "180bd58", "OOV6_RESULTS_blind_cases.jsonl", lambda r: True),
 ]
 
 
