@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Indic booking guard</title>
+<meta name="description" content="A deterministic guard between a voice agent's language model and a clinic booking. Demo with synthetic data only.">
+<style>
+  :root {
+    --bg: #f7f6f2; --card: #ffffff; --ink: #1d1d1b; --muted: #5f5e58; --line: #e2e0d8;
+    --accent: #1f5f8b; --ok: #1e7a46; --ok-bg: #e8f4ec; --warn: #8a5a00; --warn-bg: #fbf1dc;
+    --bad: #a3271f; --bad-bg: #fbe9e7; --check: #6b3fa0; --check-bg: #f1eaf9;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #151514; --card: #1f1f1d; --ink: #ecebe6; --muted: #a9a79f; --line: #34332f;
+      --accent: #7db7e0; --ok: #7fd0a1; --ok-bg: #16281e; --warn: #f0c46b; --warn-bg: #2c2414;
+      --bad: #f19a90; --bad-bg: #2f1a17; --check: #c3a4ec; --check-bg: #241b30;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 720px; margin: 0 auto; padding: 20px 16px 48px; }
+  h1 { font-size: 1.5rem; margin: 8px 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 16px; }
+  .notice { background: var(--warn-bg); color: var(--ink); border: 1px solid var(--line); border-left: 4px solid var(--warn);
+            padding: 10px 12px; border-radius: 8px; font-size: .92rem; margin-bottom: 16px; }
+  .notice p { margin: 0; }
+  .notice p + p { margin-top: 4px; color: var(--muted); }
+  label { font-weight: 600; display: block; margin-bottom: 6px; }
+  textarea { width: 100%; min-height: 96px; font: inherit; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px;
+             background: var(--card); color: var(--ink); resize: vertical; }
+  textarea:focus, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
+  .count { color: var(--muted); font-size: .85rem; }
+  .count.over { color: var(--bad); font-weight: 600; }
+  button { font: inherit; cursor: pointer; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--ink);
+           padding: 8px 12px; }
+  button.primary { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 600; padding: 10px 18px; }
+  @media (prefers-color-scheme: dark) { button.primary { color: #10202c; } }
+  button:disabled { opacity: .6; cursor: wait; }
+  .examples { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin: 14px 0 18px; }
+  .examples button { text-align: left; font-size: .9rem; }
+  .examples small { display: block; color: var(--muted); font-size: .78rem; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-top: 16px; }
+  .badge { display: inline-block; font-weight: 700; padding: 4px 10px; border-radius: 999px; font-size: .95rem; }
+  .k-book { background: var(--ok-bg); color: var(--ok); }
+  .k-ask_again, .k-handoff, .k-write_failed { background: var(--warn-bg); color: var(--warn); }
+  .k-urgent { background: var(--bad-bg); color: var(--bad); }
+  .k-human_check { background: var(--check-bg); color: var(--check); }
+  dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; margin: 12px 0; }
+  dt { color: var(--muted); }
+  dd { margin: 0; font-weight: 600; }
+  .why { margin: 8px 0; }
+  .say { color: var(--muted); font-style: italic; margin: 8px 0; }
+  ul.checks { list-style: none; padding: 0; margin: 8px 0 0; font-size: .88rem; }
+  ul.checks li { padding: 4px 0 4px 22px; position: relative; border-top: 1px solid var(--line); word-break: break-word; }
+  ul.checks li::before { position: absolute; left: 2px; font-weight: 700; }
+  ul.checks li.ok::before { content: "\2713"; color: var(--ok); }
+  ul.checks li.fail::before { content: "!"; color: var(--bad); left: 6px; }
+  .note { font-size: .88rem; color: var(--warn); margin-top: 8px; }
+  .err { color: var(--bad); font-weight: 600; }
+  footer { margin-top: 28px; color: var(--muted); font-size: .85rem; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Indic booking guard</h1>
+  <p class="sub">What a clinic's voice agent heard, in Hinglish, Kannada-English or English. The language model reads it; a deterministic guard decides whether it is safe to book.</p>
+
+  <div class="notice" role="note">
+    <p><strong>Demo with synthetic data only. Do not enter real patient information. Not a medical device. In an emergency call 108.</strong></p>
+    <p>Emergency detection caught 15 of 22 on the latest blind test and misses some phrasings.</p>
+  </div>
+
+  <label for="u">What the caller said</label>
+  <textarea id="u" maxlength="400" placeholder="kal shaam saade chaar baje appointment chahiye, naam Ramesh"></textarea>
+  <div class="row">
+    <span class="count" id="count">0 / 300</span>
+    <button class="primary" id="go">Check</button>
+  </div>
+
+  <div class="examples" aria-label="Examples">
+    <button data-u="kal shaam sawa paanch baje appointment chahiye, naam Ramesh">Hinglish booking<small>tomorrow, 5:15 in the evening</small></button>
+    <button data-u="naale beligge hattu vare gantege appointment beku, nanna hesaru Kavya">Kannada-English booking<small>tomorrow morning, half past ten</small></button>
+    <button data-u="Papa ko seene mein bhaari lag raha hai aur paseena aa raha hai, kal ka slot chahiye">Emergency<small>chest heaviness and sweating</small></button>
+    <button data-u="parso ke do din baad subah das baje, naam Lalita">Stacked-day trick<small>two days after the day after tomorrow</small></button>
+  </div>
+
+  <div id="out" aria-live="polite"></div>
+
+  <footer>
+    <p>Clinic, slots and register are synthetic and reset whenever the server restarts. The clinic is open Monday to Saturday, 09:00 to 13:00 and 16:00 to 20:00. Times are resolved against now, in IST.</p>
+    <p>Code, blind ledger and failure analysis: <a href="https://github.com/Aarti-panchal01/indic-booking-guard">github.com/Aarti-panchal01/indic-booking-guard</a></p>
+  </footer>
+</main>
+<script>
+  const MAX = 300;
+  const u = document.getElementById("u"), go = document.getElementById("go"), out = document.getElementById("out"), count = document.getElementById("count");
+  const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
+  function updateCount() {
+    count.textContent = u.value.length + " / " + MAX;
+    count.classList.toggle("over", u.value.length > MAX);
+  }
+  u.addEventListener("input", updateCount);
+  document.querySelectorAll(".examples button").forEach(b => b.addEventListener("click", () => { u.value = b.dataset.u; updateCount(); run(); }));
+  go.addEventListener("click", run);
+  u.addEventListener("keydown", e => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) run(); });
+
+  async function run() {
+    const text = u.value;
+    if (!text.trim()) { out.innerHTML = '<div class="card err">Type what the caller said.</div>'; return; }
+    if (text.length > MAX) { out.innerHTML = '<div class="card err">Please keep it under ' + MAX + ' characters (yours is ' + text.length + ').</div>'; return; }
+    go.disabled = true; go.textContent = "Checking...";
+    try {
+      const r = await fetch("/api/check", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({utterance: text})});
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) { out.innerHTML = '<div class="card err">' + esc(data.error || ("Something went wrong (" + r.status + "). Please try again.")) + '</div>'; return; }
+      out.innerHTML = render(data);
+    } catch (e) {
+      out.innerHTML = '<div class="card err">Could not reach the demo server. Please try again.</div>';
+    } finally {
+      go.disabled = false; go.textContent = "Check";
+    }
+  }
+
+  function render(d) {
+    const c = d.card;
+    const kind = c.action === "escalate" ? (c.tier || "urgent") : c.action;
+    const rows = [];
+    if (c.date) rows.push(["Date", c.date]);
+    if (c.time) rows.push(["Time", c.time]);
+    if (c.name) rows.push(["Name", c.name]);
+    rows.push(["Confirmed", c.confirmed ? "yes, written to the register" : "no"]);
+    rows.push(["Call time", d.reference]);
+    return '<div class="card">' +
+      '<span class="badge k-' + esc(kind) + '">' + esc(c.label) + '</span>' +
+      '<dl>' + rows.map(([k, v]) => '<dt>' + esc(k) + '</dt><dd>' + esc(v) + '</dd>').join("") + '</dl>' +
+      '<p class="why">' + esc(c.why) + '</p>' +
+      (c.say ? '<p class="say">Agent says: "' + esc(c.say) + '"</p>' : "") +
+      (c.model_note ? '<p class="note">' + esc(c.model_note) + '</p>' : "") +
+      '<details open><summary>Checks (' + c.checks.length + ')</summary><ul class="checks">' +
+      c.checks.map(x => '<li class="' + esc(x.status) + '">' + esc(x.text) + '</li>').join("") + '</ul></details>' +
+      '<p class="sub" style="margin-top:10px;font-size:.82rem">Model: ' + esc(d.model) + '</p>' +
+      '</div>';
+  }
+  updateCount();
+</script>
+</body>
+</html>

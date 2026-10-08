@@ -1,0 +1,10 @@
+{
+  "builds": [
+    {
+      "src": "api.py",
+      "use": "@vercel/python",
+      "config": { "includeFiles": ["guard/**", "data/clinic.json", "web/**"] }
+    }
+  ],
+  "routes": [{ "src": "/(.*)", "dest": "api.py" }]
+}

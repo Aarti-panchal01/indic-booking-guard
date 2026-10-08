@@ -26,7 +26,7 @@ def test_book_then_same_slot_is_taken():
     assert (r2["action"], r2["date"], r2["time"], r2["confirmed"]) == ("book", "2026-10-08", "17:15", True)
     r3 = c.post("/book", json=free).json()["decision"]
     assert (r3["action"], r3["reason"]) == ("ask_again", "slot_taken")
-    assert {"slot": "2026-10-08T17:15", "name": "Ramesh", "source": "guard"} in c.get("/bookings").json()
+    assert {"slot": "2026-10-08T17:15", "name": "Ramesh", "source": "guard"} in c.get("/bookings").json()["bookings"]
 
 
 def test_red_flag_escalates_and_failed_write_is_not_confirmed():
@@ -38,4 +38,4 @@ def test_red_flag_escalates_and_failed_write_is_not_confirmed():
     failing = client(register=Register(fail_writes=True))
     wf = failing.post("/book", json={"utterance": "parso subah 10 baje, naam Ramesh", "reference_datetime": REF}).json()["decision"]
     assert (wf["action"], wf["confirmed"]) == ("write_failed", False)
-    assert all(b["source"] == "seed" for b in failing.get("/bookings").json())
+    assert all(b["source"] == "seed" for b in failing.get("/bookings").json()["bookings"])

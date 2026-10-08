@@ -1,12 +1,44 @@
 # Indic booking guard
 
-A deterministic guardrail and eval layer that sits between an LLM's extraction and a clinic booking write, for callers who speak Hinglish or Kannada-English (Latin script).
+A deterministic guard that sits between a voice agent's language model and a clinic booking, for callers who speak Hinglish, Kannada-English or English.
 
-It resolves relative dates, day-parts and half-hours in code ("kal shaam saade chaar baje", "naale sanje naalku-vare"), checks a stated weekday against the date, validates the slot against the register, sends cardiac and stroke red-flag phrases to a human, refuses to book when words it does not understand sit next to the day or time, and never says "confirmed" unless the register write succeeded. A real local model (Ollama `qwen3:4b`) is in the loop. The eval compares the raw model, the community dateparser fix, and model + guard.
+**Live demo:** LIVE_URL (synthetic data only). Try `kal shaam sawa paanch baje appointment chahiye, naam Ramesh`, then `parso ke do din baad subah das baje, naam Lalita`.
+
+**The problem.** LLM voice agents get booking dates wrong, often by a day, even on frontier models. The usual fix, resolving dates in code with dateparser, returns nothing for Hinglish or Kannada-English ("kal shaam saade chaar baje", "naale sanje naalku gante"). And a booking agent must not book a caller who is describing a heart attack or a stroke.
+
+**Headline, blind numbers first.** On blind probe v7 (60 cases written by a separate agent, committed before the fix, run once on the frozen guard with qwen3:4b): **0 wrong bookings vs 13 for the model alone**, and emergencies caught **15 of 22 vs 6 for the model alone**. Caveat: every case is synthetic and AI-written, not native-speaker audited, so none of this is a production error rate.
+
+**Known limitation: emergency detection plateaued around 68% on blind tests (12 of 18, then 15 of 22), because symptom vocabulary is open-ended; rule lists and a broad human-check tier did not close the gap. This is a prototype, not for real patients.** The next design is a stronger model as judge on any call that mentions the body, failing safe to a human.
+
+```mermaid
+flowchart LR
+    A[Caller transcript] --> M[LLM extraction<br/>Groq qwen3.8-27b in the demo<br/>Ollama qwen3:4b in the eval]
+    A -->|caller's own words| R
+    M -->|intent, name, red flag| R
+    subgraph G[Guard: deterministic]
+      R[Red flags: urgent tier] --> HC[Human-check tier]
+      HC --> D[Dates and times from<br/>the caller's words]
+      D --> C[Weekday, hours, closed,<br/>taken, stacked days]
+      C --> AW[Allowlist: every word<br/>near the slot understood?]
+    end
+    R -->|known sign| U[Urgent: 108 and staff]
+    HC -->|body complaint today| S[Staff call back]
+    C -->|problem| Q[Ask the caller again]
+    AW -->|unknown word| Q
+    AW -->|ok| DB[(Register)]
+    DB -->|write ok| OK[Say: confirmed]
+    DB -->|write failed| NC[Say: NOT confirmed]
+```
+
+---
+
+## Background
+
+It resolves relative dates, day-parts and half-hours in code ("kal shaam saade chaar baje", "naale sanje naalku-vare"), checks a stated weekday against the date, validates the slot against the register, sends cardiac and stroke red-flag phrases to a human, refuses to book when words it does not understand sit next to the day or time, and never says "confirmed" unless the register write succeeded. The model's own date and time are never used for the booking. The eval compares the raw model, the community dateparser fix, and model + guard, with a real local model (Ollama `qwen3:4b`) in the loop.
 
 Built over Oct 7 to 8 2026 as the backend and eval layer for a clinic booking front desk.
 
-**Results in one paragraph.** 503 synthetic cases, every number vs qwen3:4b (4B, Q4). The honest numbers are the **blind** ones: each test set was written by a separate agent, committed with its sha256, and run once on a frozen guard before anyone read it. On sets written in the spec's own vocabulary the guard was strong from the start (blind: 23/24, 81/84, 47/48; 2 wrong bookings in 156). On sets written to use words the spec does not list, the first guard was not: blind wrong bookings were 1, 6 and 7, and it missed 3 of 7, 4 of 8 and 3 of 9 emergencies. Each fix of the "add the words we missed" kind was beaten by the next probe. The design change that worked was flipping the polarity: **book only if every word next to the day and time is understood or known to be harmless**. On two fresh blind probes after that change: 35/60 and 33/60 correct (raw model 16 and 21, dateparser 15 and 14), **1 and 0 wrong bookings** (raw model 14 and 7, dateparser 0 and 1). **Emergencies are the weak side**: the second of those probes missed 4 of 7, one in plain English. The dateparser baseline almost never books wrongly because it understands almost nothing (it asked again or handed off on 42 and 40 of those 60). **Caveat first:** all cases are AI-written and not native-speaker-audited; nothing here is a production error rate. See [Failure analysis](#failure-analysis).
+**Results in one paragraph (as of blind v5; v6 and v7 are in the ledger below).** 503 synthetic cases, every number vs qwen3:4b (4B, Q4). The honest numbers are the **blind** ones: each test set was written by a separate agent, committed with its sha256, and run once on a frozen guard before anyone read it. On sets written in the spec's own vocabulary the guard was strong from the start (blind: 23/24, 81/84, 47/48; 2 wrong bookings in 156). On sets written to use words the spec does not list, the first guard was not: blind wrong bookings were 1, 6 and 7, and it missed 3 of 7, 4 of 8 and 3 of 9 emergencies. Each fix of the "add the words we missed" kind was beaten by the next probe. The design change that worked was flipping the polarity: **book only if every word next to the day and time is understood or known to be harmless**. On two fresh blind probes after that change: 35/60 and 33/60 correct (raw model 16 and 21, dateparser 15 and 14), **1 and 0 wrong bookings** (raw model 14 and 7, dateparser 0 and 1). **Emergencies are the weak side**: the second of those probes missed 4 of 7, one in plain English. The dateparser baseline almost never books wrongly because it understands almost nothing (it asked again or handed off on 42 and 40 of those 60). **Caveat first:** all cases are AI-written and not native-speaker-audited; nothing here is a production error rate. See [Failure analysis](#failure-analysis).
 
 ## Discovery brief
 
@@ -23,32 +55,13 @@ Built over Oct 7 to 8 2026 as the backend and eval layer for a clinic booking fr
 
 ## Architecture
 
-```mermaid
-flowchart LR
-    A[Caller transcript<br/>Hinglish / Kannada-English] --> M[ExtractionModel<br/>qwen3:4b via Ollama<br/>or MockModel]
-    M -->|intent, name,<br/>verbatim day/time words| G
-    A -->|caller's own words| G
-    subgraph G[Guard: deterministic]
-      R[Red-flag list<br/>WHO-mapped] --> I[Intent gate]
-      I --> N[Normaliser<br/>kal/naale, shaam/sanje,<br/>saade/paune/vare/mukkaalu]
-      N --> W[Weekday vs date check]
-      W --> C[Past / far / closed /<br/>hours / taken checks]
-      C --> AW[Allowlist window:<br/>every word next to the<br/>day/time understood?]
-    end
-    R -->|red flag| H1[Human / 108]
-    I -->|not a booking| H2[Staff morning list]
-    C -->|problem| Q[Ask the caller again]
-    AW -->|unknown word| Q
-    AW -->|ok| DB[(SQLite register)]
-    DB -->|write ok| OK[Say: confirmed]
-    DB -->|write failed| NC[Say: NOT confirmed,<br/>clinic will call back]
-```
+The diagram is at the top of this README.
 
 Probabilistic part: the model call (`guard/model.py`). It supplies intent, the patient's name (kept only if those words appear in the transcript and are not day or time words) and, for English only, verbatim words as a dateparser fallback (used only if the words really occur in the transcript). **The model's own date and time are never used for the booking.**
 
 Deterministic part: everything in `guard/normalise.py`, `guard/redflags.py`, `guard/guard.py`, `guard/register.py`.
 
-Human in the loop: red flags (human or 108), non-booking requests (staff list), every ambiguity or unknown word near the slot (ask the caller again), and every failed write (the clinic calls back).
+Human in the loop: urgent red flags (human or 108), the human-check tier (staff call back before any booking), non-booking requests (staff list), every ambiguity or unknown word near the slot (ask the caller again), and every failed write (the clinic calls back).
 
 ## Files
 
@@ -58,25 +71,28 @@ Human in the loop: red flags (human or 108), non-booking requests (staff list), 
 | `data/golden.jsonl` | Main golden set, 156 cases (dev set: the guard was tuned on it) |
 | `data/held_out.jsonl` | Held-out v1, 24 cases, separate author, committed before the normaliser existed |
 | `data/held_out_v2.jsonl` | Held-out v2, 48 adversarial cases in the spec's vocabulary, separate author |
-| `data/oov_probe*.jsonl` | Out-of-vocabulary probes v1 to v5 (45, 50, 60, 60, 60 cases): phrasing the spec does not list, each by a separate author |
+| `data/oov_probe*.jsonl` | Out-of-vocabulary probes v1 to v7 (45, 50, 60, 60, 60, 60, 60 cases): phrasing the spec does not list, each by a separate author |
 | `data/check_labels.py` | Label consistency checker (calendar, sessions, register, weekday words) |
 | `data/clinic.json` | Synthetic clinic: hours, closed day, seeded register |
 | `guard/` | schema, model interface, normaliser, red flags, guard, baselines, register |
 | `eval/run.py` | Labelled sets: writes `eval/RESULTS.md` and per-case `eval/RESULTS_cases.jsonl` |
 | `eval/oov.py` | OOV probes: correct / safe miss / wrong booking / missed emergency / false escalation |
 | `eval/*_blind.md`, `eval/RESULTS_v1_frozen_563f11e.md`, `eval/RESULTS_golden156_first.md` | The blind runs, kept exactly as first generated |
-| `eval/collect.py` | Calls the real model once per case, caches to `eval/cache/*.jsonl` (committed) |
+| `eval/collect.py` | Calls a real model once per case (Ollama or Groq), caches to `eval/cache/*.jsonl` (committed) |
 | `eval/confirmation.py` | Ungated confirmation baseline on write failures, writes `eval/CONFIRMATION.md` |
-| `api.py` | Thin FastAPI wrapper: `POST /book` (model + guard + register), `GET /bookings`. Local only, no auth |
-| `tests/` | pytest, mock model only (529 tests) |
+| `api.py` | FastAPI app: the demo page (`GET /`), `POST /api/check`, `POST /book`, `GET /bookings`; input limit, per-IP rate limit, non-persistent demo register |
+| `web/index.html` | The one-page demo (no framework) |
+| `vercel.json`, `requirements.txt` | Vercel Python deployment |
+| `eval/PROVENANCE.md` | sha256 of every held-out set and probe, recorded at commit time, and the old-to-new commit hash table |
+| `eval/redflag_report.py` | Emergencies caught (urgent + human check), false escalations, wrong bookings per set |
+| `tests/` | pytest, mock model and mocked HTTP only, no network |
 
 Every held-out and probe file's sha256 and commit time is in `eval/PROVENANCE.md`, recorded before the guard was run on it.
 
 ## How to run
 
 ```bash
-cd build
-pip install fastapi uvicorn pydantic httpx dateparser pytest   # Python 3.13 used
+pip install -r requirements.txt uvicorn pytest            # Python 3.13 used
 python -I -m pytest -q tests                              # mock model only, no Ollama needed
 python -I eval/run.py --offline                           # regenerate RESULTS.md from the committed model cache
 python -I eval/oov.py --offline --probe data/oov_probe_v4.jsonl --out eval/OOV4_RESULTS.md
@@ -88,11 +104,15 @@ python -I eval/collect.py qwen3:4b data/golden.jsonl data/held_out.jsonl data/he
 python -I eval/run.py
 python -I eval/confirmation.py
 
-# HTTP: POST /book {"utterance": "...", "reference_datetime": "2026-10-07T20:40:00+05:30"}, GET /bookings
-GUARD_MODEL=mock uvicorn api:app --port 8000              # or GUARD_MODEL=qwen3:4b (default) with Ollama running
+# with the hosted demo model (free Groq key in .env as GROQ_API_KEY=..., never committed)
+python -I eval/collect.py groq:qwen/qwen3.8-27b data/held_out.jsonl
+python -I eval/run.py --offline --model groq:qwen/qwen3.8-27b --split held_out --out eval/GROQ_RESULTS_held_out.md
+
+# the demo app: page at /, POST /api/check {"utterance": "..."}, POST /book, GET /bookings
+GUARD_MODEL=mock uvicorn api:app --port 8000              # or set GROQ_API_KEY, or GUARD_MODEL=qwen3:4b with Ollama
 ```
 
-`python -I` keeps stray files in the working folder from shadowing the standard library. No API key is needed (`.env.example`).
+`python -I` keeps stray files in the working folder from shadowing the standard library. The tests and the offline eval need no key; only the live demo and a fresh Groq collection do (`.env.example`).
 
 ## Eval results
 
@@ -153,7 +173,7 @@ After the second Oct 8 round (`280db73`), over the 563 non-blind cases including
 
 **Latency.** Model call p50 about 10 s on this laptop (CPU, recorded when the cache was filled). The guard's `decide()`, including SQLite checks and the write, p50 1.3 to 1.6 ms.
 
-**Tests.** `python -I -m pytest -q tests`: 618 passed, mock model only (89 added Oct 8 in `tests/test_phase3_fixes.py` and `tests/test_round2_fixes.py`, one group per rule, all in new wording, none copied from a probe). Regression tests exist for every blind failure, written in new words rather than copied from the probe files, plus tests that pin the accepted costs (cases where the guard now asks again although a human would book).
+**Tests.** `python -I -m pytest -q tests`: 636 passed, mock model and mocked HTTP only, no network (89 red-flag and date tests added Oct 8 in `tests/test_phase3_fixes.py` and `tests/test_round2_fixes.py`, one group per rule, all in new wording, none copied from a probe; 18 more for the Groq model and the demo app). Regression tests exist for every blind failure, written in new words rather than copied from the probe files, plus tests that pin the accepted costs (cases where the guard now asks again although a human would book).
 
 ## Failure analysis
 
