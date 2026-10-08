@@ -175,6 +175,23 @@ After the second Oct 8 round (`280db73`), over the 563 non-blind cases including
 
 **Tests.** `python -I -m pytest -q tests`: 636 passed, mock model and mocked HTTP only, no network (89 red-flag and date tests added Oct 8 in `tests/test_phase3_fixes.py` and `tests/test_round2_fixes.py`, one group per rule, all in new wording, none copied from a probe; 18 more for the Groq model and the demo app). Regression tests exist for every blind failure, written in new words rather than copied from the probe files, plus tests that pin the accepted costs (cases where the guard now asks again although a human would book).
 
+## Live demo model: qwen/qwen3.8-27b (Groq)
+
+The live demo calls `qwen/qwen3.8-27b` on Groq's free tier (the only Qwen3 model on the account; same prompt as the local model, JSON mode, reasoning off). It was run once per case on four sets, cached in `eval/cache/groq_qwen_qwen3.8-27b.jsonl`, reports in `eval/GROQ_*`. **These numbers are not in the blind ledger and are not blind:** v6 is dev data, and v7's guard is unchanged since its blind run but its failures have been read. The guard is the same frozen commit (`280db73`) that ran blind v7.
+
+| Set | Model alone: correct / wrong bookings / emergencies caught | Model + guard: correct / wrong bookings / emergencies caught | False escalations (guard) |
+|---|---|---|---|
+| Held-out v1, 24 | 12 / 8 / 2 of 3 | 23 / 0 / 3 of 3 | 0 |
+| Held-out v2, 48 | 25 / 13 / 3 of 6 | 46 / 0 / 6 of 6 | 0 |
+| OOV v6, 60 | 35 / 14 / 13 of 18 | 51 / 0 / 18 of 18 (2 via human check) | 1 |
+| OOV v7, 60 | 31 / 15 / 14 of 22 | 45 / 0 / 18 of 22 | 2 |
+
+What this says, plainly:
+- **The bigger hosted model is better than qwen3:4b, not worse.** On its own it gets far more dates right (held-out v1: 12 of 24 against 4 of 24) and its own red flag catches more emergencies (v7: 14 of 22 against 6 of 22).
+- **It still books the wrong slot often on its own** (8, 13, 14 and 15 wrong bookings on the four sets). With the guard: 0 on all four.
+- **Model plus guard catches more emergencies than either alone** on v7 (18 of 22), because the guard escalates on either signal. That is the "second net" the known limitation asks for, partly: 4 of 22 are still missed.
+- Latency: p50 about 4 to 5 s per call on the free tier, mostly rate-limit pacing (8,000 tokens per minute); a single call takes under 1 s.
+
 ## Failure analysis
 
 **1. How the raw model fails** (main + held-out v1, 45 cases that should book, measured on the first 96 cases):
