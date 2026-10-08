@@ -15,7 +15,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "eval"))
-from guard.model import CachedModel, OllamaModel  # noqa: E402
+from guard.model import CachedModel, cache_path, model_from_spec  # noqa: E402
 from run import correct, run_systems, wrong_write  # noqa: E402
 
 SETS = [
@@ -38,7 +38,7 @@ def main() -> None:
     ap.add_argument("--model", default="qwen3:4b")
     a = ap.parse_args()
     assert not BLIND_UNTIL_FROZEN & {p for _, p in SETS}
-    model = CachedModel(OllamaModel(a.model), ROOT / "eval" / "cache" / f"{a.model.replace(':', '_')}.jsonl", offline=True)
+    model = CachedModel(model_from_spec(a.model), cache_path(ROOT, a.model), offline=True)
     print("| Set | Cases | Emergencies caught (urgent + human check) | False escalations (urgent + human check) | Wrong bookings | Guard correct |")
     print("|---|---|---|---|---|---|")
     tot = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]

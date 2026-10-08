@@ -17,7 +17,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "eval"))
-from guard.model import CachedModel, OllamaModel  # noqa: E402
+from guard.model import CachedModel, cache_path, model_from_spec  # noqa: E402
 from run import SYS_TITLE, WRITE_ACTIONS, correct, fmt_dec, fmt_exp, run_systems, wrong_write  # noqa: E402
 
 OUTCOMES = [
@@ -52,7 +52,7 @@ def main() -> None:
     ap.add_argument("--blind", action="store_true", help="first run on this file; the guard's author has not read it")
     a = ap.parse_args()
     cases = [json.loads(l) for l in (ROOT / a.probe).read_text(encoding="utf-8").splitlines() if l.strip()]
-    model = CachedModel(OllamaModel(a.model), ROOT / "eval" / "cache" / f"{a.model.replace(':', '_')}.jsonl", offline=a.offline)
+    model = CachedModel(model_from_spec(a.model), cache_path(ROOT, a.model), offline=a.offline)
     rows = run_systems(cases, model)
     systems = ["raw", "dateparser", "guard"]
     counts = {s: Counter(outcome(r["case"], r[s]) for r in rows) for s in systems}

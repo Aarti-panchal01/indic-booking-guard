@@ -1,6 +1,7 @@
 """All model calls go through `ExtractionModel`.
 
 - `OllamaModel`: a real local model (default qwen3:4b, Q4) via the Ollama HTTP API.
+- `GroqModel`: a hosted model via Groq's OpenAI-compatible API (the live demo). Key from GROQ_API_KEY only.
 - `MockModel`: a clearly labelled mock for pytest and for machines without Ollama.
 - `CachedModel`: wraps any model and stores every call in a committed JSONL file,
   so eval/RESULTS.md can be regenerated without re-running the model.
@@ -10,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import time
 from datetime import datetime
 from pathlib import Path
@@ -96,6 +98,117 @@ class OllamaModel:
         extraction, err = parse_extraction(raw)
         return ModelResult(model=self.name, extraction=extraction, raw=raw,
                            latency_s=round(time.perf_counter() - t0, 3), error=err)
+
+
+class RateLimited(Exception):
+    """Groq said 429 on every retry. The caller decides what to tell the user."""
+
+
+class GroqModel:
+    """Hosted model through Groq's OpenAI-compatible API (used by the live demo).
+
+    The key comes only from the GROQ_API_KEY environment variable and is never logged or stored.
+    Free-tier rate limits: a 429 is retried with backoff (Retry-After when given, else 2, 4, 8 ... s);
+    after `max_retries` the result carries error "rate_limited" instead of raising.
+    """
+
+    BASE_URL = "https://api.groq.com/openai/v1"
+
+    def __init__(self, model: str, api_key: Optional[str] = None, base_url: Optional[str] = None,
+                 timeout_s: float = 30.0, max_retries: int = 4, client: Optional[httpx.Client] = None,
+                 sleep: Callable[[float], None] = time.sleep, max_wait_s: float = 30.0):
+        self.model = model
+        self.name = f"groq:{model}"
+        self._key = api_key if api_key is not None else os.environ.get("GROQ_API_KEY", "")
+        self.base_url = base_url or os.environ.get("GROQ_BASE_URL", self.BASE_URL)
+        self.timeout_s = timeout_s
+        self.max_retries = max_retries
+        self.max_wait_s = max_wait_s
+        self._client = client
+        self._sleep = sleep
+
+    def _http(self) -> httpx.Client:
+        if self._client is None:
+            self._client = httpx.Client(timeout=self.timeout_s)
+        return self._client
+
+    def _headers(self) -> dict:
+        return {"Authorization": f"Bearer {self._key}", "Content-Type": "application/json"}
+
+    def list_models(self) -> list[str]:
+        r = self._http().get(f"{self.base_url}/models", headers=self._headers())
+        r.raise_for_status()
+        return sorted(m["id"] for m in r.json().get("data", []))
+
+    def _post(self, body: dict) -> httpx.Response:
+        for attempt in range(self.max_retries + 1):
+            r = self._http().post(f"{self.base_url}/chat/completions", headers=self._headers(), json=body)
+            if r.status_code != 429 and r.status_code < 500:
+                return r
+            if attempt == self.max_retries:
+                break
+            retry_after = r.headers.get("retry-after")
+            try:
+                wait = float(retry_after) if retry_after else 2.0 ** (attempt + 1)
+            except ValueError:
+                wait = 2.0 ** (attempt + 1)
+            self._sleep(min(wait, self.max_wait_s))
+        if r.status_code == 429:
+            raise RateLimited()
+        return r
+
+    def extract(self, utterance: str, reference: datetime) -> ModelResult:
+        t0 = time.perf_counter()
+        if not self._key:
+            return ModelResult(model=self.name, error="call_error: GROQ_API_KEY is not set")
+        body = {
+            "model": self.model,
+            "temperature": 0,
+            "seed": 7,
+            "response_format": {"type": "json_object"},
+            "messages": [
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": user_prompt(utterance, reference)},
+            ],
+        }
+        if "qwen3" in self.model:
+            body["reasoning_effort"] = "none"  # same as think=False for the local qwen3
+        try:
+            r = self._post(body)
+            r.raise_for_status()
+            raw = r.json()["choices"][0]["message"]["content"] or ""
+        except RateLimited:
+            return ModelResult(model=self.name, latency_s=round(time.perf_counter() - t0, 3), error="call_error: rate_limited")
+        except Exception as e:  # network, timeout, HTTP error: recorded, not raised (never includes the key)
+            return ModelResult(model=self.name, latency_s=round(time.perf_counter() - t0, 3),
+                               error=f"call_error: {type(e).__name__}: {str(e)[:200]}")
+        raw = _strip_think(raw)
+        extraction, err = parse_extraction(raw)
+        return ModelResult(model=self.name, extraction=extraction, raw=raw,
+                           latency_s=round(time.perf_counter() - t0, 3), error=err)
+
+
+def _strip_think(raw: str) -> str:
+    """Some hosted reasoning models prepend <think>...</think>; keep only the JSON after it."""
+    if "</think>" in raw:
+        raw = raw.split("</think>", 1)[1]
+    return raw.strip()
+
+
+def model_from_spec(spec: str):
+    """'mock' -> MockModel; 'groq:<model id>' -> GroqModel; 'ollama:<tag>' or a bare tag ('qwen3:4b') -> OllamaModel."""
+    if spec == "mock":
+        return MockModel()
+    if spec.startswith("groq:"):
+        return GroqModel(spec[len("groq:"):])
+    if spec.startswith("ollama:"):
+        spec = spec[len("ollama:"):]
+    return OllamaModel(spec)
+
+
+def cache_path(root: Path, spec: str) -> Path:
+    """eval/cache/<spec with unsafe characters as _>.jsonl ('qwen3:4b' -> qwen3_4b.jsonl, unchanged from before)."""
+    return Path(root) / "eval" / "cache" / (re.sub(r"[^A-Za-z0-9._-]", "_", spec) + ".jsonl")
 
 
 class MockModel:

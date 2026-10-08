@@ -11,11 +11,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
-from guard.model import CachedModel, OllamaModel  # noqa: E402
+from guard.model import CachedModel, cache_path, model_from_spec  # noqa: E402
 
 model = sys.argv[1] if len(sys.argv) > 1 else "qwen3:4b"
 files = sys.argv[2:] or ["data/golden.jsonl", "data/held_out.jsonl"]
-cm = CachedModel(OllamaModel(model), ROOT / "eval" / "cache" / f"{model.replace(':', '_')}.jsonl")
+cm = CachedModel(model_from_spec(model), cache_path(ROOT, model))
 for f in files:
     cases = [json.loads(l) for l in (ROOT / f).read_text(encoding="utf-8").splitlines() if l.strip()]
     for i, c in enumerate(cases):

@@ -20,7 +20,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 from guard.baselines import dateparser_system, raw_model_system  # noqa: E402
 from guard.guard import Guard  # noqa: E402
-from guard.model import CachedModel, MockModel, OllamaModel  # noqa: E402
+from guard.model import CachedModel, MockModel, cache_path, model_from_spec  # noqa: E402
 from guard.register import Register  # noqa: E402
 
 FILES = {"main": "data/golden.jsonl", "held_out": "data/held_out.jsonl", "held_out_v2": "data/held_out_v2.jsonl"}
@@ -189,7 +189,7 @@ def main() -> None:
     if a.model == "mock":
         model = MockModel()
     else:
-        model = CachedModel(OllamaModel(a.model), ROOT / "eval" / "cache" / f"{a.model.replace(':', '_')}.jsonl", offline=a.offline)
+        model = CachedModel(model_from_spec(a.model), cache_path(ROOT, a.model), offline=a.offline)
     if a.split == "all":
         splits = [s for s in FILES if (ROOT / FILES[s]).exists()]
     else:
