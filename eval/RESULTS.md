@@ -1,6 +1,6 @@
 # Eval results (vs qwen3:4b (4B, Q4))
 
-Generated 2026-10-08 13:06 IST by `python -I eval/run.py --offline`.
+Generated 2026-10-08 13:46 IST by `python -I eval/run.py --offline`.
 All cases are synthetic, AI-written, not native-speaker-audited. Every number is vs qwen3:4b (4B, Q4); nothing here is a claim about production error rates.
 
 Systems (all three share the same SQLite register tool, which rejects closed days, out-of-hours and taken slots):
@@ -10,7 +10,7 @@ Systems (all three share the same SQLite register tool, which rejects closed day
 
 ## Main golden set: 156 cases
 
-model calls: 156, model latency p50 9.9 s, p90 10.8 s (recorded when the cache was filled); parse status: {'ok': 156}. Guard decide() incl. SQLite checks and write: p50 0.96 ms, max 13.80 ms (this run).
+model calls: 156, model latency p50 9.9 s, p90 10.8 s (recorded when the cache was filled); parse status: {'ok': 156}. Guard decide() incl. SQLite checks and write: p50 2.79 ms, max 29.22 ms (this run).
 
 | Metric | Raw model + register | Model words + dateparser + register | Model + guard |
 |---|---|---|---|
@@ -37,7 +37,7 @@ model calls: 156, model latency p50 9.9 s, p90 10.8 s (recorded when the cache w
 
 ## Held-out v1 (separate author; blind result was 23/24 with 1 wrong write, see RESULTS_v1_frozen_b721436.md; numbers below are AFTER the H024 fix, so not blind): 24 cases
 
-model calls: 24, model latency p50 10.6 s, p90 11.2 s (recorded when the cache was filled); parse status: {'ok': 24}. Guard decide() incl. SQLite checks and write: p50 0.84 ms, max 2.00 ms (this run).
+model calls: 24, model latency p50 10.6 s, p90 11.2 s (recorded when the cache was filled); parse status: {'ok': 24}. Guard decide() incl. SQLite checks and write: p50 2.98 ms, max 6.48 ms (this run).
 
 | Metric | Raw model + register | Model words + dateparser + register | Model + guard |
 |---|---|---|---|
@@ -63,7 +63,7 @@ model calls: 24, model latency p50 10.6 s, p90 11.2 s (recorded when the cache w
 
 ## Held-out v2, adversarial (separate author; blind result was 47/48 with 0 wrong writes, see RESULTS_v2_blind.md; numbers below are on the final guard, after its author read the set, so not blind): 48 cases
 
-model calls: 48, model latency p50 10.5 s, p90 11.2 s (recorded when the cache was filled); parse status: {'ok': 48}. Guard decide() incl. SQLite checks and write: p50 1.12 ms, max 10.59 ms (this run).
+model calls: 48, model latency p50 10.5 s, p90 11.2 s (recorded when the cache was filled); parse status: {'ok': 48}. Guard decide() incl. SQLite checks and write: p50 3.68 ms, max 26.54 ms (this run).
 
 | Metric | Raw model + register | Model words + dateparser + register | Model + guard |
 |---|---|---|---|

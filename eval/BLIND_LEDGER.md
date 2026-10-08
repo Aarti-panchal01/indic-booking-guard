@@ -11,5 +11,6 @@
 | OOV probe v4, after the allowlist change | `0a55b09` | 60 | 35 | 1 | 1/7 | 14 | 0 | 16 / 15 |
 | OOV probe v5, second run of the allowlist guard | `5903181` | 60 | 33 | 0 | 4/7 | 7 | 1 | 21 / 14 |
 | OOV probe v6, after the red-flag and stacked-day fix (18 emergencies) | `180bd58` | 60 | 45 | 1 | 6/18 | 15 | 2 | 17 / 12 |
+| OOV probe v7, after the two-tier, loss-of-function and Marathi round (22 emergencies) | `5ef403e` | 60 | 43 | 0 | 7/22 | 16 | 2 | 11 / 10 |
 
-Totals over 491 blind cases (75 emergencies): raw: correct 129, wrong bookings 129, missed emergencies 44; dateparser: correct 99, wrong bookings 10, missed emergencies 44; guard: correct 344, wrong bookings 18, missed emergencies 22
+Totals over 551 blind cases (97 emergencies): raw: correct 140, wrong bookings 145, missed emergencies 60; dateparser: correct 109, wrong bookings 12, missed emergencies 60; guard: correct 387, wrong bookings 18, missed emergencies 29
