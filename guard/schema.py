@@ -62,5 +62,8 @@ class Decision(BaseModel):
     date: Optional[str] = None
     time: Optional[str] = None
     confirmed: bool = False  # True only if the agent told the caller "confirmed"
+    # for action "escalate": "urgent" (a known red-flag sign: human now / 108) or "human_check"
+    # (body region + complaint + onset today, sign word unknown: staff call back now, no booking)
+    tier: Optional[str] = None
     say: str = ""            # what the agent says back (for the README examples)
     trace: list[str] = Field(default_factory=list)  # which deterministic checks fired

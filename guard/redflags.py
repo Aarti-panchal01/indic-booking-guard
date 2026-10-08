@@ -12,6 +12,7 @@ Three layers, all deterministic:
 2. Body part x symptom co-occurrence on word stems (added Oct 8 after blind OOV v5 missed 4 of 7
    emergencies on new wording: "dum phool", "edeya ... kallu", "kaanisthilla", "jaw and left arm ... aching").
 3. Jaw / left-arm pain alone, sudden limb weakness, and named events ("heart attack", "stroke").
+Marathi words (added Oct 8, second round) are AI-written, not native-speaker audited.
 Every hit is then checked for negation and past history:
 - list negation: one "no"/"illa" covers a whole list ("no chest pain or breathlessness",
   "ede novu mattu usiraata kashta illa"), but only if every word between the negation and the symptom
@@ -73,6 +74,11 @@ RED_FLAGS: list[tuple[str, str]] = [
     ("vision", r"\b(?:nahi|nahin) dikh|\bdikh(?:na|ai|ayi)? (?:nahi|nahin|band)|\b(?:can'?t|cannot|unable to|not able to) see\b"),
     # speech failing, phrased as "can't talk"
     ("speech", r"\bbol nahi pa\w*|\bsaaf nahi bol\w*|\b(?:can'?t|cannot|unable to|not able to) (?:talk|speak)\b"),
+    # Marathi (Oct 8, second round). AI-written, not native-speaker audited.
+    ("breathing", r"\b(?:shwas|shvas|shwaas)\w* (?:\w+ )?(?:gheta yet nahi|ghenyas tras|yet nahi|kondal\w*|kondat\w*|atak\w*|lagt\w*)"
+                  r"|\b(?:dam|dhaap|dhap) lagt\w*"),
+    ("speech", r"\bbolta (?:\w+ )?yet nahi|\bbolay?la (?:jamat|yet) nahi|\bspasht(?:a)? (?:\w+ )?(?:yet )?nahi"),
+    ("vision", r"\b(?:dola|dole|dolyan\w*|dolyat\w*)(?: \w+){0,2} (?:dis(?:at|ta)? nahi|disena\w*|andhuk\w*|andhar\w*)"),
 ]
 
 # ---------------------------------------------------------------- layer 2: body part x symptom on stems
@@ -81,27 +87,29 @@ RED_FLAGS: list[tuple[str, str]] = [
 WINDOW = 5  # 4 missed "chhaati ke andar ajeeb sa bhaaripan" (new-wording test, Oct 8)
 COOCCUR: list[tuple[str, str, str]] = [
     ("chest_pain",
-     r"chest|seen\w*|seena|sina|sine|chh?aa?ti|chati|ede\w*|yede\w*|dil|heart",
+     r"chest|seen\w*|seena|sina|sine|chh?aa?ti\w*|chati|ede\w*|yede\w*|dil|heart|hriday\w*",
      r"pain\w*|ache\w*|aching|dard|dukh\w*|novu|nov|novvu|jalan|urit\w*|uri|bhaar\w*|bhara|bhar|dab\w*|jakad\w*|jakd\w*|"
      r"tight\w*|heav\w*|pressure|squeez\w*|crush\w*|bojh|boj|weight|patthar|pathar|kallu|tondare|tondre|kashta|kasta|"
-     r"ghabra\w*|discomfort|hidi\w*"),
+     r"ghabra\w*|discomfort|hidi\w*|jad\w*|aaval\w*|chep\w*"),
     ("breathing",
-     r"saans|sans|swaas|shwaas|swas|dum|breath|breathe|breathing|usir\w*|ushir\w*",  # not "saas" (mother-in-law)
+     r"saans|sans|swaas|shwaas|swas|shwas\w*|shvas\w*|dum|dam|dhaap|dhap|breath|breathe|breathing|usir\w*|ushir\w*",  # not "saas" (mother-in-law)
      r"phool\w*|phul\w*|ful|fula|fulna|fool\w*|ruk\w*|atak\w*|ghut\w*|chadh\w*|takleef|taklif|dikkat|kashta|kasta|kattid\w*|short\w*|"
-     r"difficult\w*|trouble|hard|struggl\w*|gasp\w*|tez|aagtilla|agtilla|tagolok\w*|tegeyok\w*"),
+     r"difficult\w*|trouble|hard|struggl\w*|gasp\w*|tez|aagtilla|agtilla|tagolok\w*|tegeyok\w*|lagt\w*|kondal\w*|kondat\w*|ghusmat\w*"),
     ("face_droop",
-     r"face|chehr\w*|chehera|munh|muh|mooh|mukha\w*|mukh|bayi|baayi|baai|hont\w*|lips?|mouth|gaal|cheek",
-     r"tedh\w*|teda|latak\w*|jhuk\w*|droop\w*|crooked|slant\w*|vakra\w*|vakara|sotta\w*|sag|sagging|sagged|sunn|suun|numb\w*|jom"),
+     r"face|chehr\w*|chehera|munh|muh|mooh|mukha\w*|mukh|bayi|baayi|baai|hont\w*|lips?|mouth|gaal|cheek|tond|tondal\w*|tondav\w*|tondach\w*",
+     r"tedh\w*|teda|latak\w*|jhuk\w*|droop\w*|crooked|slant\w*|vakra\w*|vakara|sotta\w*|sag|sagging|sagged|sunn|suun|numb\w*|jom|"
+     r"vakd\w*|vaakd\w*|vank\w*|sarakl\w*"),
     # strong speech words may go with "ajeeb" (strange); bol/talk/speak may not ("Sunita bol rahi hoon, ajeeb si problem")
     ("speech",
      r"zub\w*|zab\w*|jeebh|jibh|nalige|naalige|awaaz|aawaz|voice|speech|maatu|maathu",
-     r"ladkhad\w*|atak\w*|slur\w*|jumbl\w*|garbl\w*|mumbl\w*|gadbad|ajeeb|ajib|thick|bhaari|bartilla|baralla|barthilla|aagtilla|agtilla"),
+     r"ladkhad\w*|atak\w*|slur\w*|jumbl\w*|garbl\w*|mumbl\w*|gadbad|ajeeb|ajib|thick|bhaari|bartilla|baralla|barthilla|aagtilla|agtilla|"
+     r"aspasht\w*|adakhal\w*|totar\w*|jad"),
     ("speech",
      r"bol\w*|speak\w*|talk\w*|words?|maat\w*",
      r"ladkhad\w*|slur\w*|jumbl\w*|garbl\w*|mumbl\w*|bartilla|baralla|barthilla"),
     ("vision",
-     r"aankh\w*|ankh\w*|kannu|kann|kannalli|kanninalli|kannige|eye|eyes|nazar|najar|vision|sight",
-     r"dhundh\w*|dhundl\w*|blur\w*|andher\w*|black|blind\w*|kaa?ni\w*illa|kaa?ni\w*ila|double|gone|lost"),
+     r"aankh\w*|ankh\w*|kannu|kann|kannalli|kanninalli|kannige|eye|eyes|nazar|najar|vision|sight|dola|dole|dolyat\w*|dolyan\w*|dolyala",
+     r"dhundh\w*|dhundl\w*|blur\w*|andher\w*|black|blind\w*|kaa?ni\w*illa|kaa?ni\w*ila|double|gone|lost|andhuk\w*|andhar\w*"),
 ]
 
 # chest + "is happening / feels" with no symptom word: a comparison ("edeya mele yaaro kootkondange aagthide",
@@ -109,41 +117,88 @@ COOCCUR: list[tuple[str, str, str]] = [
 CHEST_FEEL = ("chest_feeling",
               r"chest|seen\w*|seena|chh?aa?ti|chati|ede\w*|yede\w*",
               r"aagthide|aagtide|aaguttide|aagutte|aagtha|lag|lagta|lagti|lagra|lagraha|lagrahi|feel|feels|feeling|felt")
-FINE = re.compile(r"\b(?:theek|thik|fine|normal|sari|ok|okay|alright|bilkul)\b")
+# present tense only: "theek ho jaayega" (it will be fine) is an underplay, not a statement that it is fine
+FINE = re.compile(r"\b(?:theek|thik|fine|normal|sari|ok|okay|alright)\b(?!\s+(?:ho\s+ja\w*|hoga|hogi|ho\s+jay\w*|hojay\w*|"
+                  r"aagutte|aagatte|hogutte|hoil|hoeel|hoyil|asel|soon|after))")
 
 # one side of the body + weak/numb
-ONE_SIDE = re.compile(r"\b(?:ek|one|ondu|aadha|aadhe|half|left|right|baayan|daayan|edagade|balagade) ?"
-                      r"(?:taraf|tarf|side|kade|bhaga|bhaag|hissa|sharir|body)\b")
-WEAK_TOKEN = r"kamzor\w*|kamjor\w*|weak\w*|sunn|suun|numb\w*|jom|jum|dead|lifeless|shakti|shakthi"
+ONE_SIDE = re.compile(r"\b(?:ek|ekach|one|ondu|aadha|aadhe|ardha|ardhya|half|left|right|baayan|daayan|edagade|balagade) ?"
+                      r"(?:taraf|tarf|side|kade|bhaga|bhaag|hissa|sharir|body|baju|bajula|bajuch\w*|ang|angala)\b")
+WEAK_TOKEN = r"kamzor\w*|kamjor\w*|weak\w*|sunn|suun|numb\w*|jom|jum|dead|lifeless|shakti|shakthi|ashakt\w*|bahirl\w*|mungy\w*"
 
 # Option (b), chosen by the author Oct 8: jaw pain, or LEFT-arm pain, on its own escalates if current.
 # Plain arm/shoulder pain stays a booking; so does jaw/left-arm pain with an injury, exercise, dental or old-onset reason.
-JAW = r"jaw|jaws|jabda|jabde|jabdo|jabdon|davade|dawade|davde|dhavade"
-LEFT = r"left|baayan|baaya|baaye|baayein|bayan|baya|ulta|ulte|edada|yedada|edagade"
-ARM = r"arm|arms|haath|hath|kai|bhuja|baazu|bazu|baanh|hand"
+JAW = r"jaw|jaws|jabda|jabde|jabdo|jabdon|jabdyat|jabdya\w*|davade|dawade|davde|dhavade|hanuvat\w*|galfad\w*"
+LEFT = r"left|baayan|baaya|baaye|baayein|bayan|baya|ulta|ulte|edada|yedada|edagade|dava|davya|dave"
+ARM = r"arm|arms|haath|hath|haat|kai|bhuja|baazu|bazu|baanh|hand"
 LEFT_ARM_ONE = r"edagai|yedagai|edgai"
 PAIN_TOKEN = r"pain\w*|ache\w*|aching|achy|dard|dukh\w*|novu|nov|novvu|heav\w*|bhaar\w*|sunn|suun|numb\w*"
 LIMB_INJURY_OR_OLD = re.compile(
     r"\b(?:gym|workout|exercise\w*|cricket|match|lifting|weights?|fell|fall|gir\w*|slip\w*|chot|injur\w*|sprain\w*|"
     r"fractur\w*|surgery|operation|typing|laptop|frozen|physio\w*|weeks?|months?|hafte|haftey|mahine|mahina|saal|"
-    r"varsha|vaara|tingalu|purana|purani|daant|dant|tooth|teeth|hallu|dentist|molar|braces|wisdom|days|dinagalinda)\b"
+    r"varsha|vaara|tingalu|purana|purani|daant|dant|tooth|teeth|hallu|dentist|molar|braces|wisdom|days|dinagalinda|"
+    r"vyayam\w*|biddu|bidd\w*|daat\w*|sprain\w*|moch|muscle|stiff\w*)\b"
     r"|\b(?:din|dino|dinon) se\b")
 
-# limb cannot be lifted/moved: escalates if sudden, or if no pain word in the sentence (pain = likely a physio case)
-LIMB = r"haath|hath|pair|paon|kai|kaalu|arm|leg|hand|bhuja"
+# Loss of function (Oct 8, second round): a body part that cannot lift, hold, move or feel, or is "not working".
+# Urgent if sudden or painless; with a pain word and no "sudden" it is more likely a physio case, so human check.
+# Hindi, Kannada, Marathi (AI-written, not native-speaker audited) and English, by construction, not fixed phrases.
+LIMB = (r"haath|hath|haat|hand|hands|arm|arms|pair|paon|paay|paya|leg|legs|kai|kaigal\w*|kaalu|bhuja|"
+        r"ungli\w*|finger\w*|beral\w*")
 LIMB_CANNOT = re.compile(
-    r"\b(?:uth|utha|uthta|uthti|uthte|hil|hila|hilta|lift|move|ett\w*)\b(?: \w+)? (?:nahi|nahin|nai|aagtilla|agtilla|illa)\b"
-    r"|\b(?:nahi|nahin) (?:uth|hil)\w*|\b(?:can'?t|cannot|unable to|not able to|won'?t) (?:lift|move|hold|grip)\b")
+    # Hindi: "<verb> nahi" with up to two words between
+    r"\b(?:uth|utha|uthta|uthti|uthte|hil|hila|hilta|hilti|pakad|pakda|pakadta|pakadti|mehsoos|mahsoos|kaam|lift|move)\w*"
+    r"(?: \w+){0,2}? (?:nahi|nahin|nai)\b"
+    r"|\b(?:nahi|nahin) (?:uth|hil|pakad)\w*"
+    # Kannada: "<verb>oke aagtilla", "kelsa maadtilla"
+    r"|\b(?:etth|ett|hidi|hidiy|alug|aadis|aadsu|kelsa|gottag|gothag)\w*(?: \w+)? "
+    r"(?:aagtilla|agtilla|aagthilla|agthilla|illa|maadtilla|madtilla|barthilla|bartilla)\b"
+    # Marathi: "<verb>ta yet nahi", "kaam karat nahi"
+    r"|\b(?:uchal|dhar|halav|halv|jaanav|jaanv|kaam)\w*(?: \w+)? (?:yet nahi|yeta nahi|karat nahi|hot nahi)\b"
+    # English
+    r"|\b(?:can'?t|cannot|unable to|not able to|won'?t|couldn'?t|could not) (?:\w+ )?(?:lift|move|hold|grip|feel|use|raise)\b"
+    r"|\b(?:not|stopped) (?:working|moving|responding)\b|\b(?:went|gone|going) (?:dead|limp|numb)\b"
+    r"|\bdropp\w* (?:things|everything|whatever)\b")
 SUDDEN = re.compile(r"\b(?:achanak\w*|sudden\w*|ekdum|ek dam|ekdam|abhi abhi|just now|thodi der|achanakkaagi|"
                     r"dideer\w*|thatt?ane)\b")
 
+# ---------------------------------------------------------------- HUMAN CHECK tier (Oct 8, second round)
+# Body regions that matter for cardiac and stroke signs. NOT knee, back, ankle or neck: this is a physio clinic,
+# and "pain since this morning" in those is a routine booking. "kai" is left out (Hindi "many").
+HC_BODY = (r"chest|seen\w*|seena|sina|sine|chh?aa?ti\w*|chati|ede\w*|yede\w*|dil|heart|hriday\w*|"
+           r"arm|arms|haath|hath|haat|hand|hands|bhuja|baazu|bazu|baanh|kandh\w*|khand\w*|shoulder|"
+           + JAW + r"|"
+           r"face|chehr\w*|munh|muh|mooh|mukha\w*|mukh|bayi|baayi|baai|hont\w*|lips?|mouth|tond|tondal\w*|tondav\w*|gaal|cheek|"
+           r"aankh\w*|ankh\w*|kannu|kann|kannalli|kanninalli|eye|eyes|nazar|vision|sight|dola|dole|dolyat\w*|dolyan\w*|"
+           r"zub\w*|zab\w*|jeebh|jibh\w*|nalige|naalige|awaaz|aawaz|voice|speech|"
+           r"sar|head|tale|doka\w*|dokyat|matha|maatha|"
+           r"saans|sans|swaas|shwaas|shwas\w*|shvas\w*|breath\w*|usir\w*|dum|dam")
+HC_COMPLAINT = (PAIN_TOKEN + r"|problem|takleef|taklif|dikkat|issue|ajeeb\w*|ajib|weird|strange|odd|funny|different|unusual|"
+                r"kuch|kuchh|something|eno|yeno|kahitari|tras\w*|kashta|kasta|hurt\w*|sore|burn\w*|jalan|tingl\w*|jhunjh\w*|"
+                r"chubh\w*|pinch\w*|prick\w*|throb\w*|tight\w*|pressure|discomfort|uneasy|bechain\w*|ghabra\w*|weak\w*|jad|"
+                r"lag|lagta|lagti|lagra|lagraha|lagrahi|lagtoy|lagtay|feel|feels|feeling|felt|aagthide|aagtide|agtide|"
+                r"aaguttide|agutte|hotay|hotoy|hotey|hota|hoti|hote|vatat\w*|wrong|off|blur\w*|dhundh\w*")
+HC_WINDOW = 6
+# onset today: now / suddenly / since a time today, in Hindi, Kannada, Marathi, English
+HC_ONSET = re.compile(
+    r"\b(?:abhi|just now|right now|suddenly|sudden|achanak\w*|ekdum|ek dam|ekdam|dideer\w*|thatt?ane|aata|eega|ega)\b"
+    r"|\b(?:subah|shaam|sham|dopahar|raat|morning|evening|afternoon|night|lunch|dinner|nashta|breakfast|beligge|sanje|"
+    r"madhyana|raatri|sakal\w*|sandhyakal\w*|dupar\w*|ratri\w*|aaj|ivattu|indu|today)(?: \w+)? (?:se|inda|ninda|pasun|since|from)\b"
+    r"|\bke baad se\b|\b\w+pasun\b"
+    r"|\bsince (?:this |today |the )?(?:morning|evening|afternoon|today|an? hour|\w+ (?:minutes|hours?)|lunch|dinner|breakfast)\b"
+    r"|\b(?:for|since) (?:the )?(?:past|last) (?:\w+ )?(?:minutes?|hours?)\b"
+    r"|\b\w+ (?:minute|minutes|mins?|ghante|ghanta|ghanton|gante|hour|hours) (?:se|inda|pasun|ago|back|pehle|hinde)\b"
+    r"|\bstarted (?:today|this morning|this evening|an hour ago|just now)\b"
+    r"|\b(?:aaj|ivattu|today|this) (?:subah|shaam|sham|dopahar|morning|evening|afternoon|beligge|sanje|madhyana|sakali|sandhyakali)\b")
+HC_SERVICE = re.compile(r"\b(?:x-?ray|report|scan|test|checkup|check-up|ecg|mri|physio\w*|exercise\w*|massage|session|therapy)\b")
+
 # ---------------------------------------------------------------- combination rules
 # arm / shoulder / jaw / back pain counts together with sweat or nausea (chest/breath escalate on their own)
-REFERRED_BODY = r"arm|arms|haath|hath|bhuja|baazu|bazu|baanh|kandha|kandhe|kandhon|shoulder|jaw|jabda|jabde|davade|kai|back|peeth"
+REFERRED_BODY = r"arm|arms|haath|hath|haat|bhuja|baazu|bazu|baanh|kandha|kandhe|kandhon|khanda|khandya|shoulder|jaw|jabda|jabde|davade|kai|back|peeth"
 NAUSEA = (r"\b(?:ulti|vomit\w*|nausea\w*|nauseous|queasy|ji machal|ji ghabra|matli|vaanti|vaakarike|"
-          r"throw(?:ing)? up|threw up|feel(?:s|ing)? like vomiting|ulti jaisa)")
-SWEAT_TOKEN = r"paseena|pasina|paseene|bevaru|beværu|sweat|sweating|sweaty"
-CHEST_TOKEN = r"dil|heart|seene|seena|chhati|chest|ede\w*|yede\w*"
+          r"throw(?:ing)? up|threw up|feel(?:s|ing)? like vomiting|ulti jaisa|malmal\w*|okari\w*)")
+SWEAT_TOKEN = r"paseena|pasina|paseene|bevaru|beværu|sweat|sweating|sweaty|ghaam\w*"
+CHEST_TOKEN = r"dil|heart|seene|seena|chh?aa?ti\w*|chest|ede\w*|yede\w*|hriday\w*"
 
 # service requests that mention chest/breath but are not symptoms
 NOT_SYMPTOM = re.compile(r"chest (?:physio|physiotherapy|therapy|exercise)|breathing exercise|saans (?:ki|wali) exercise|usirata exercise", re.I)
@@ -165,11 +220,13 @@ NEG_BEFORE = {"no", "not", "never", "without", "bina", "nor", "neither", "none"}
 NEG_AFTER = {"nahi", "nahin", "nai", "illa", "ila", "ilve", "ilvu", "not"}
 # what may follow the after-negation for it to count ("dard nahi hai.", "novu illa, ...", "dard nahi, sirf ...")
 NEG_TAIL = {"hai", "he", "hain", "h", "ha", "ide", "ji", "sir", "madam", "tha", "thi", "the", "ittu", "haina",
-            "sirf", "bas", "only", "just", "aur", "and", "but", "lekin", "aadre"}
+            "sirf", "bas", "only", "just", "aur", "and", "but", "lekin", "aadre",
+            "ani", "aahe", "ahe", "fakt", "pan"}  # Marathi: and, is, only, but
 # words that may sit between the negation and the symptom: joiners and fillers (never "problem": "No problem, chest pain hai")
 JOINERS = {"or", "and", "nor", "aur", "ya", "yaa", "mattu", "matthu", "mathu", "athava", "athwa", "na", "no", ",",
            "ki", "ka", "ke", "ko", "koi", "kuch", "bhi", "any", "enu", "yenu", "yaavude", "the", "my", "his", "her",
-           "a", "of", "in", "me", "mein", "mai", "mien", "to", "with", "lene", "left", "right", "sudden", "achanak"}
+           "a", "of", "in", "me", "mein", "mai", "mien", "to", "with", "lene", "left", "right", "sudden", "achanak",
+           "ani", "kinva", "kiwa", "va", "pan", "kahi"}  # Marathi joiners (AI-written, not native-speaker audited)
 # symptom words that may sit inside a negated list
 LIST_WORDS = re.compile(
     r"(?:pain\w*|ache\w*|aching|dard|novu|nov|kashta|kasta|takleef|taklif|dikkat|breath\w*|saans|usir\w*|"
@@ -183,10 +240,11 @@ LONG_PAST = re.compile(
     r"|\b(?:last|pichhle|pichle|pichhla|pichla|kaleda|hindina|previous)\s+(?:year|saal|month|mahine|varsha|varshada|tingalu)\b"
     r"(?!\s+(?:se|since|inda|from))"
     r"|\bin (?:19|20)\d\d\b|\bonce had\b|\bhistory of\b")
-NOW_WORDS = re.compile(r"\b(?:abhi|ab|now|today|aaj|ivattu|indu|ega|eega|currently|still|abhi bhi|ab bhi|innu|"
+NOW_WORDS = re.compile(r"\b(?:abhi|ab|now|today|aaj|aata|ivattu|indu|ega|eega|currently|still|abhi bhi|ab bhi|innu|"
                        r"again|phir se|fir se|wapas|marali|tonight|right now|since morning|subah se|beligge inda)\b")
 
-TOKEN = re.compile(r"[^\W_]+(?:'[^\W_]+)?|[.,?!;]")
+# English possessive "'s" is split off so "arm's" reads as "arm" (keeps "can't", "won't")
+TOKEN = re.compile(r"[^\W_]+(?:'(?!s\b)[^\W_]+)?|[.,?!;]")
 SENT_END = {".", "?", "!", ";"}
 CONTRAST = {"but", "lekin", "magar", "aadre", "aadare", "aadru", "however", "though", "although", "balki"}
 
@@ -267,7 +325,7 @@ def _tok_excluded(tx: _Text, i0: int, i1: int) -> bool:
     return _excluded(tx, tx.toks[i0][1], tx.toks[i1][2])
 
 
-def _pairs(tx: _Text, left: str, right: str, window: int):
+def _pairs(tx: _Text, left: str, right: str, window: int, same: str = "part"):
     """Token index pairs (i, j): token i fully matches `left`, token j `right`, |i-j| <= window, same comma-part
     ("Seene mein koi dikkat nahi hai, saans bhi bilkul theek hai" must not pair "dikkat" with "saans")."""
     w = tx.words()
@@ -276,16 +334,29 @@ def _pairs(tx: _Text, left: str, right: str, window: int):
     R = [j for j, t in enumerate(w) if rre.fullmatch(t)]
     for i in L:
         for j in R:
-            if i != j and abs(i - j) <= window and tx.part[i] == tx.part[j]:
+            grp = tx.part if same == "part" else tx.sent
+            if i != j and abs(i - j) <= window and grp[i] == grp[j]:
                 yield min(i, j), max(i, j)
 
 
 def red_flag_hits(text: str) -> list[str]:
-    """Return the red-flag signs found (empty list if none). Deterministic."""
+    """URGENT tier: the known red-flag signs found (empty list if none). Deterministic."""
+    return sorted(_analyse(text)[0])
+
+
+def human_check_hits(text: str) -> list[str]:
+    """HUMAN CHECK tier: reasons to have staff call back now instead of booking, when no urgent sign was found.
+    Empty if an urgent sign was found (that tier wins) or if nothing fired."""
+    urgent, check = _analyse(text)
+    return [] if urgent else sorted(check)
+
+
+def _analyse(text: str) -> tuple[set[str], set[str]]:
     s = NOT_SYMPTOM.sub(" ", text.lower())
     tx = _Text(s)
     w = tx.words()
-    hits: set[str] = set()
+    hits: set[str] = set()   # urgent
+    check: set[str] = set()  # human check
 
     # layer 1: fixed phrases
     for sign, pat in RED_FLAGS:
@@ -319,16 +390,18 @@ def red_flag_hits(text: str) -> list[str]:
             hits.add("jaw_or_left_arm_pain")
             break
 
-    # layer 3b: a limb that suddenly cannot be lifted or moved
+    # layer 3b: loss of function (urgent if sudden or painless, else human check)
     for m in LIMB_CANNOT.finditer(s):
         i0, i1 = tx.span_to_tokens(m.start(), m.end())
         sent = tx.sent_text(i0)
-        limb_near = any(re.fullmatch(LIMB, w[j]) and abs(j - i0) <= WINDOW + 2 and tx.sent[j] == tx.sent[i0] for j in range(len(w)))
+        limb_near = any(re.fullmatch(LIMB, w[j]) and min(abs(j - i0), abs(j - i1)) <= WINDOW + 1 and tx.sent[j] == tx.sent[i0]
+                        for j in range(len(w)))
+        # the phrase carries its own negative ("uth nahi"), so list negation does not apply ("..., novu enu illa"
+        # = no pain must not cancel it); only past history does
+        if not limb_near or LIMB_INJURY_OR_OLD.search(sent) or _past(tx, i0) or PAST_BEFORE.search(s[max(0, m.start() - 45): m.start()]):
+            continue
         no_pain = not re.search(r"\b(?:" + PAIN_TOKEN + r")\b", sent)
-        if limb_near and (SUDDEN.search(sent) or no_pain) and not LIMB_INJURY_OR_OLD.search(sent) \
-                and not _excluded(tx, m.start(), m.end()):
-            hits.add("limb_cannot_move")
-            break
+        (hits if SUDDEN.search(sent) or no_pain else check).add("loss_of_function")
 
     # combination rules (each part must itself be current and not negated)
     referred = [p for p in _pairs(tx, REFERRED_BODY, PAIN_TOKEN, WINDOW) if not _tok_excluded(tx, *p)]
@@ -339,4 +412,25 @@ def red_flag_hits(text: str) -> list[str]:
     chest = [i for i, t in enumerate(w) if re.fullmatch(CHEST_TOKEN, t) and not _tok_excluded(tx, i, i)]
     if "chest_pain" not in hits and chest and sweat:
         hits.add("chest_word_with_sweat")
-    return sorted(hits)
+    # chest word with nausea, same shape as chest word with sweat
+    if "chest_pain" not in hits and chest and nausea:
+        hits.add("chest_word_with_nausea")
+
+    # HUMAN CHECK tier: a red-flag body region + any complaint or feeling word + onset today, even when the sign
+    # word itself is unknown, unless the sentence gives a benign reason (injury, gym, dental, old history),
+    # negates it, is in the past, or asks for a service. Vocabulary is open-ended; this net exists for that.
+    for i, j in _pairs(tx, HC_BODY, HC_COMPLAINT, HC_WINDOW, same="sent"):
+        sent = tx.sent_text(i)
+        if not HC_ONSET.search(sent) or LIMB_INJURY_OR_OLD.search(sent) or HC_SERVICE.search(sent):
+            continue
+        if FINE.search(tx.part_text(i)) or _tok_excluded(tx, i, j):
+            continue
+        check.add("body_complaint_onset_today")
+        break
+    for m in ONE_SIDE.finditer(s):
+        i0, _ = tx.span_to_tokens(m.start(), m.end())
+        sent = tx.sent_text(i0)
+        if HC_ONSET.search(sent) and not LIMB_INJURY_OR_OLD.search(sent) and not _excluded(tx, m.start(), m.end()):
+            check.add("one_side_onset_today")
+            break
+    return hits, check

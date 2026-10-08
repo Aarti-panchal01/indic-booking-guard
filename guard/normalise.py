@@ -291,6 +291,11 @@ def parse(text: str) -> Parse:
                 used.update(i for i in range(max(0, k - 3), min(n, k + 3)) if toks[i] in NEXT_WORDS | WEEK_WORDS | {"ke", "ka", "ki", "da", "de", "wala", "vala", "waala"})
             p.days.append(DayExpr(k, kind, wd, words=t)); used.add(k); continue
     # explicit dates: "10 tareekh", "9th", "october 9", "9 october", "9 ne tareeku"
+    # A month already claimed by an ordinal ("the 2nd of November") cannot also claim the next number, and a
+    # number after a comma does not attach to a month before it: "2nd of November, five in the evening" is a
+    # date and a time, not two dates (OOV v4 S042).
+    month_used: set[int] = set()
+    cstarts = set(_clause_starts(text, toks))
     for k, t in enumerate(toks):
         if k in used:
             continue
@@ -304,6 +309,10 @@ def parse(text: str) -> Parse:
         if t in ORDINALS or (t in ("twenty", "thirty") and nxt in ORDINALS and ORDINALS[nxt] < 10):
             val, end = (ORDINALS[t], k + 1) if t in ORDINALS else (DAY_WORDS[t] + ORDINALS[nxt], k + 2)
             month = MONTHS.get(at(end)) or (MONTHS.get(at(end + 1)) if at(end) == "of" else None) or MONTHS.get(at(k - 1))
+            for mi in (end, end + 1, k - 1):
+                if at(mi) in MONTHS:
+                    month_used.add(mi)
+                    break
             p.days.append(DayExpr(k, "date", val, month=month, words=" ".join(toks[k:end]))); used.update(range(k, end))
             continue
         markers = DATE_MARKERS
@@ -322,8 +331,14 @@ def parse(text: str) -> Parse:
         is_date = False
         if nxt in markers or (nxt == "ne" and nxt2 in markers):
             is_date = True
-            month = MONTHS.get(nxt) or MONTHS.get(nxt2)
-        elif at(k - 1) in MONTHS:
+            # "3rd november", "2nd of november", "november 3rd": the month may sit after "of" or before the number
+            # (before Oct 8 the month was dropped here, so "november 10th" resolved to October 10)
+            for mi in (k + 1, k + 2, k + 3 if nxt2 == "of" else -1, k - 1):
+                if mi >= 0 and at(mi) in MONTHS and mi not in month_used:
+                    month = MONTHS[at(mi)]
+                    month_used.add(mi)
+                    break
+        elif at(k - 1) in MONTHS and (k - 1) not in month_used and k not in cstarts:
             is_date = True
             month = MONTHS[at(k - 1)]
         if is_date and nxt not in TIME_UNITS:

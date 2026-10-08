@@ -15,7 +15,7 @@ from typing import Optional
 from .baselines import dateparse_words
 from .normalise import (DAYPARTS, FRAC_POST, FRAC_PRE, FRAC_WHOLE, HEDGES, NUM_WORDS, RELATIVE, TIME_UNITS, WEEKDAY_OF,
                         WINDOW, DayExpr, Parse, parse, resolve_day, resolve_time, tokenize, unknown_near, weekday_conflict)
-from .redflags import red_flag_hits
+from .redflags import human_check_hits, red_flag_hits
 from .register import Register, RegisterWriteError
 from .schema import REASON_PRIORITY, Decision, ModelResult
 
@@ -39,6 +39,7 @@ TITLES = {"ji", "sir", "madam", "aunty", "uncle", "mr", "mrs", "ms", "dr", "shri
 
 SAY = {
     "escalate": "This sounds urgent. Please call 108 now. I am also alerting the clinic staff.",
+    "human_check": "Before we book, I am asking the clinic staff to call you back now about this. If it gets worse, call 108.",
     "handoff": "I will pass this to the clinic staff; they will call you back in the morning.",
     "write_failed": "I could not save the booking just now. The clinic will call you back to confirm. It is NOT confirmed yet.",
 }
@@ -121,6 +122,7 @@ def choose_anchor(p: Parse) -> Optional[DayExpr]:
     return last_c
 
 
+ONSET_AFTER = {"se", "inda", "ninda", "pasun", "pasoon", "since"}
 STACK_CORRECTIONS = {"no", "wait", "sorry", "actually", "instead", "rather", "nahi", "nahin", "nai", "alla", "illa",
                      "beda", "matlab", "balki", "mean", "change"}
 
@@ -139,9 +141,21 @@ def stacked_days(p: Parse, ref_d: date) -> Optional[str]:
     for e in p.days:
         if _is_offset(e) and e.pos >= 2 and RELATIVE.get(t[e.pos - 2], 0) != 0 and t[e.pos - 1] in ("se", "inda", "ninda", "from"):
             return f"'{t[e.pos - 2]} {t[e.pos - 1]}' then '{e.words}' (chained offset)"
-    # "since about the 3rd", "from the 2nd": a day in the caller's history, not a booking day
-    concrete = [e for e in p.days if e.kind in ("relative", "date")
-                and not {"since", "from"} & set(t[max(0, e.pos - 3): e.pos])]
+    # "since about the 3rd", "from the 2nd", "today since the evening": a day in the caller's history or a
+    # symptom onset, not a booking day (TAXONOMY 3.1, clarified before v7)
+    def history(e: DayExpr) -> bool:
+        end = e.pos + len(e.words.split())
+        nxt = t[end] if end < len(t) else ""
+        nxt2 = t[end + 1] if end + 1 < len(t) else ""
+        return bool({"since", "from"} & set(t[max(0, e.pos - 3): e.pos])) or nxt in ONSET_AFTER             or (nxt in DAYPARTS and nxt2 in ONSET_AFTER)
+    # a weekday or a date chained to a later offset ("<weekday> ke 2 din baad"): ask
+    for e in p.days:
+        if not _is_offset(e):
+            continue
+        for w in p.days:
+            if w is not e and w.pos < e.pos and w.kind != "relative" and not history(w)                     and not any(w.pos < c < e.pos for c in p.corrections) and not STACK_CORRECTIONS & set(t[w.pos + 1: e.pos]):
+                return f"'{w.words}' then '{e.words}' (chained offset)"
+    concrete = [e for e in p.days if e.kind in ("relative", "date") and not history(e)]
     for a, b in zip(concrete, concrete[1:]):
         if any(a.pos < c < b.pos for c in p.corrections) or STACK_CORRECTIONS & set(t[a.pos + 1: b.pos]):
             continue
@@ -172,9 +186,13 @@ class Guard:
         # 1. red flags: deterministic list first; the model's flag also escalates (cheap to over-escalate)
         hits = red_flag_hits(utterance)
         if hits:
-            return Decision(action="escalate", say=SAY["escalate"], trace=[f"red flag list: {hits}"])
+            return Decision(action="escalate", tier="urgent", say=SAY["escalate"], trace=[f"red flag list: {hits}"])
         if mr.extraction and mr.extraction.red_flag:
-            return Decision(action="escalate", say=SAY["escalate"], trace=["model red_flag (list did not fire)"])
+            return Decision(action="escalate", tier="urgent", say=SAY["escalate"], trace=["model red_flag (list did not fire)"])
+        # 1b. human check: body region + complaint + onset today, sign word unknown. Staff call back now; no booking.
+        check = human_check_hits(utterance)
+        if check:
+            return Decision(action="escalate", tier="human_check", say=SAY["human_check"], trace=[f"human check: {check}"])
 
         # 2. not a new booking -> staff
         #    cancel/reschedule from the model are trusted. "question"/"other" are not: in eval
