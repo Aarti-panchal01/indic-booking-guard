@@ -28,8 +28,6 @@ TOP_KEYS = {"id", "utterance", "lang_mix", "reference_datetime", "category", "to
             "expected", "notes", "provenance"}
 EXP_KEYS = {"action", "name", "date", "time", "reason"}
 PROVENANCE = "synthetic, AI-written, not native-speaker-audited"
-# the author's own blind set (data/aarti_blind_v1.jsonl), ids A001..A999
-AUTHOR_PROVENANCE = "written by a native speaker (the author), before the fix"
 
 # weekday index: Monday = 0
 WEEKDAYS = {}
@@ -94,14 +92,15 @@ def main():
         def v(msg):
             viol.append(f"{cid}: {msg}")
 
-        if set(c) != TOP_KEYS:
+        # OOV probe files (T ids) may carry an extra "oov_features" list
+        if set(c) - {"oov_features"} != TOP_KEYS:
             v(f"top-level keys differ: missing {TOP_KEYS - set(c)}, extra {set(c) - TOP_KEYS}")
             continue
         exp = c["expected"]
         if not isinstance(exp, dict) or set(exp) != EXP_KEYS:
             v("expected keys wrong")
             continue
-        if not re.fullmatch(r"[GHVA]\d{3}", cid):
+        if not re.fullmatch(r"[GHVT]\d{3}", cid):
             v("id format")
         if cid in seen:
             v("duplicate id")
@@ -112,10 +111,7 @@ def main():
             v(f"category {c['category']}")
         if not isinstance(c["tool_failure"], bool):
             v("tool_failure not bool")
-        if cid.startswith("A"):
-            if c["provenance"] != AUTHOR_PROVENANCE:
-                v(f"provenance must be exactly {AUTHOR_PROVENANCE!r} for A ids")
-        elif not str(c["provenance"]).startswith(PROVENANCE):
+        if not str(c["provenance"]).startswith(PROVENANCE):
             v("provenance string")
         if not c["utterance"].strip() or not c["notes"].strip():
             v("empty utterance/notes")

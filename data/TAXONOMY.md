@@ -73,6 +73,7 @@ These rules decide every label. If a case needs a rule that is not here, do not 
 | "agle <weekday>", "next <weekday>", "mundina <weekday>" with no "hafte/vaara/week" | **ambiguous_date** if the bare-weekday rule and the next-week rule give different dates; otherwise that date. (On Wed Oct 7: "next Friday" = Oct 9 or Oct 16 -> ambiguous; "next Monday" = Oct 12 both ways -> Oct 12.) |
 | "<N> tareekh", "<N> taareekh", "<N>th", "October <N>", "<N>-ne tareeku" (Kannada) | day N of the current month if N >= reference day, else day N of next month. If that day N is today and the time has passed, `past_time`. |
 | weekday + date both stated | if the weekday does not match the date: `weekday_mismatch` (never silently pick one). |
+| two day expressions stacked with no correction marker between them ("parso ke do din baad", "naale aadmele eradu dina", "kal ke agle din") | `ambiguous_date`, date null: ask again, never compute or pick one. Added 2026-10-08, before the v6 probe was written. |
 
 Weekday names: Hindi somvar, mangalvar, budhvar, guruvar / brihaspativar, shukravar, shanivar, ravivar. Kannada somavara, mangalavara, budhavara, guruvara, shukravara, shanivara, bhanuvara / ravivara. English names. Spelling variants (somwar, mangalwar, budhwar, shukrawar, shaniwar) mean the same.
 
