@@ -1,0 +1,12 @@
+# Out-of-vocabulary probe (vs qwen3:4b)
+
+Generated 2026-10-08 13:44 IST by `python -I eval/oov.py`. 60 cases in `data/oov_probe_v7.jsonl`, written by a separate agent to use phrasing that `data/TAXONOMY.md` does not list. Synthetic, AI-written, not native-speaker-audited. BLIND: the guard's author did not read the file before this run.
+
+| Outcome | Raw model + register | Model words + dateparser + register | Model + guard |
+|---|---|---|---|
+| Correct (same action, and same slot or reason) | 11/60 | 10/60 | 43/60 |
+| Safe miss: asked again or handed off instead of the right action | 20/60 | 33/60 | 8/60 |
+| WRONG BOOKING written or attempted | 13/60 | 1/60 | 0/60 |
+| MISSED EMERGENCY (label escalate, system did not) | 16/60 | 16/60 | 7/60 |
+| False escalation (escalated a non-emergency) | 0/60 | 0/60 | 2/60 |
+| All wrong bookings, incl. booked emergencies (not exclusive) | 16/60 | 2/60 | 0/60 |
