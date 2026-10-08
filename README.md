@@ -191,6 +191,7 @@ What this says, plainly:
 - **It still books the wrong slot often on its own** (8, 13, 14 and 15 wrong bookings on the four sets). With the guard: 0 on all four.
 - **Model plus guard catches more emergencies than either alone** on v7 (18 of 22), because the guard escalates on either signal. That is the "second net" the known limitation asks for, partly: 4 of 22 are still missed.
 - Latency: p50 about 4 to 5 s per call on the free tier, mostly rate-limit pacing (8,000 tokens per minute); a single call takes under 1 s.
+- Found while testing the live demo, after this eval was collected (all 192 eval calls had returned valid JSON): the free tier also caps output at 1,000 tokens per minute and reserves about 600 per call unless told otherwise, so the client now asks for at most 200; and on one sentence ("parso ke do din baad subah das baje, naam Lalita") the model returned nothing at temperature 0, so an empty answer now gets one retry with another seed. Groq's `json_validate_failed` gets one retry without JSON mode. When the model still fails, the guard runs on the caller's words alone and the page says so.
 
 ## Failure analysis
 

@@ -165,6 +165,9 @@ class GroqModel:
             "model": self.model,
             "temperature": 0,
             "seed": 7,
+            # the answer is a ~100-token JSON object; without a cap the free tier reserves ~600 output tokens per call
+            # against a 1,000 output-tokens-per-minute limit
+            "max_completion_tokens": 200,
             "response_format": {"type": "json_object"},
             "messages": [
                 {"role": "system", "content": SYSTEM_PROMPT},
@@ -175,8 +178,19 @@ class GroqModel:
             body["reasoning_effort"] = "none"  # same as think=False for the local qwen3
         try:
             r = self._post(body)
+            if r.status_code == 400 and "json_validate_failed" in r.text:
+                # Groq rejected the model's own JSON-mode output: ask once more without JSON mode, parse the object out
+                body.pop("response_format")
+                r = self._post(body)
             r.raise_for_status()
             raw = r.json()["choices"][0]["message"]["content"] or ""
+            if not raw.strip():
+                # seen on one sentence at temperature 0 / seed 7: the model emits nothing. One more try, another seed.
+                body.pop("response_format", None)
+                body["seed"], body["temperature"] = 8, 0.2
+                r = self._post(body)
+                r.raise_for_status()
+                raw = r.json()["choices"][0]["message"]["content"] or ""
         except RateLimited:
             return ModelResult(model=self.name, latency_s=round(time.perf_counter() - t0, 3), error="call_error: rate_limited")
         except Exception as e:  # network, timeout, HTTP error: recorded, not raised (never includes the key)
@@ -192,7 +206,10 @@ def _strip_think(raw: str) -> str:
     """Some hosted reasoning models prepend <think>...</think>; keep only the JSON after it."""
     if "</think>" in raw:
         raw = raw.split("</think>", 1)[1]
-    return raw.strip()
+    raw = raw.strip()
+    if not raw.startswith("{") and "{" in raw and "}" in raw:  # text around the object (no JSON mode)
+        raw = raw[raw.index("{"): raw.rindex("}") + 1]
+    return raw
 
 
 def model_from_spec(spec: str):

@@ -48,6 +48,43 @@ def test_success_parses_and_sends_the_right_request():
     assert FAKE_KEY not in res.model_dump_json()
 
 
+def test_output_tokens_are_capped():
+    seen = {}
+
+    def handler(req):
+        seen.update(json.loads(req.content))
+        return httpx.Response(200, json=chat_reply(json.dumps(GOOD)))
+
+    model_with(handler)[0].extract("x", REF)
+    assert seen["max_completion_tokens"] == 200
+
+
+def test_json_validate_failed_retries_without_json_mode():
+    bodies = []
+
+    def handler(req):
+        b = json.loads(req.content)
+        bodies.append(b)
+        if "response_format" in b:
+            return httpx.Response(400, json={"error": {"code": "json_validate_failed", "message": "Failed to generate JSON"}})
+        return httpx.Response(200, json=chat_reply("Here is the JSON:\n" + json.dumps(GOOD) + "\nDone."))
+
+    res = model_with(handler)[0].extract("x", REF)
+    assert res.error is None and res.extraction.patient_name == "Ravi"
+    assert "response_format" in bodies[0] and "response_format" not in bodies[1]
+
+
+def test_empty_output_retries_once_with_another_seed():
+    bodies = []
+
+    def handler(req):
+        bodies.append(json.loads(req.content))
+        return httpx.Response(200, json=chat_reply("" if len(bodies) == 1 else json.dumps(GOOD)))
+
+    res = model_with(handler)[0].extract("x", REF)
+    assert res.error is None and len(bodies) == 2 and bodies[1]["seed"] != bodies[0]["seed"]
+
+
 def test_think_block_is_stripped():
     m, _ = model_with(lambda r: httpx.Response(200, json=chat_reply("<think>hmm</think>\n" + json.dumps(GOOD))))
     assert m.extract("x", REF).extraction.time == "16:00"
