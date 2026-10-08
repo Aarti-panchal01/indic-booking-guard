@@ -4,7 +4,7 @@ Usage (from build/): python -I eval/ledger.py   -> eval/BLIND_LEDGER.md
 
 Each blind run's per-case file was written by the run itself and committed unchanged, so this
 recomputes the README table instead of trusting hand-typed numbers. Held-out v1's blind run
-predates per-case dumps; its row is read from eval/RESULTS_v1_frozen_b721436.md and marked.
+predates per-case dumps; its row is read from eval/RESULTS_v1_frozen_563f11e.md and marked.
 """
 from __future__ import annotations
 
@@ -16,15 +16,15 @@ ROOT = Path(__file__).resolve().parent.parent
 WRITE = {"book", "write_failed"}
 
 RUNS = [  # (label, guard commit, per-case file, case filter)
-    ("Golden G073 to G156, first run", "00f0c25", "RESULTS_golden156_first_cases.jsonl", lambda r: int(r["id"][1:]) > 72),
-    ("Held-out v2 (spec vocabulary, adversarial)", "00f0c25", "RESULTS_v2_blind_cases.jsonl", lambda r: True),
-    ("OOV probe v1", "759faf4", "OOV_RESULTS_blind_cases.jsonl", lambda r: True),
-    ("OOV probe v2", "92dcbd9", "OOV2_RESULTS_blind_cases.jsonl", lambda r: True),
-    ("OOV probe v3", "2f4b7be", "OOV3_RESULTS_blind_cases.jsonl", lambda r: True),
-    ("OOV probe v4, after the allowlist change", "0a55b09", "OOV4_RESULTS_blind_cases.jsonl", lambda r: True),
-    ("OOV probe v5, second run of the allowlist guard", "5903181", "OOV5_RESULTS_blind_cases.jsonl", lambda r: True),
-    ("OOV probe v6, after the red-flag and stacked-day fix (18 emergencies)", "180bd58", "OOV6_RESULTS_blind_cases.jsonl", lambda r: True),
-    ("OOV probe v7, after the two-tier, loss-of-function and Marathi round (22 emergencies)", "5ef403e", "OOV7_RESULTS_blind_cases.jsonl", lambda r: True),
+    ("Golden G073 to G156, first run", "134afc9", "RESULTS_golden156_first_cases.jsonl", lambda r: int(r["id"][1:]) > 72),
+    ("Held-out v2 (spec vocabulary, adversarial)", "134afc9", "RESULTS_v2_blind_cases.jsonl", lambda r: True),
+    ("OOV probe v1", "b17251e", "OOV_RESULTS_blind_cases.jsonl", lambda r: True),
+    ("OOV probe v2", "021e809", "OOV2_RESULTS_blind_cases.jsonl", lambda r: True),
+    ("OOV probe v3", "e9af785", "OOV3_RESULTS_blind_cases.jsonl", lambda r: True),
+    ("OOV probe v4, after the allowlist change", "b485dac", "OOV4_RESULTS_blind_cases.jsonl", lambda r: True),
+    ("OOV probe v5, second run of the allowlist guard", "333fae9", "OOV5_RESULTS_blind_cases.jsonl", lambda r: True),
+    ("OOV probe v6, after the red-flag and stacked-day fix (18 emergencies)", "84ae5c2", "OOV6_RESULTS_blind_cases.jsonl", lambda r: True),
+    ("OOV probe v7, after the two-tier, loss-of-function and Marathi round (22 emergencies)", "280db73", "OOV7_RESULTS_blind_cases.jsonl", lambda r: True),
 ]
 
 
@@ -58,7 +58,7 @@ def row(rows: list[dict]) -> dict:
 
 
 def v1_row() -> dict:
-    t = (ROOT / "eval" / "RESULTS_v1_frozen_b721436.md").read_text(encoding="utf-8")
+    t = (ROOT / "eval" / "RESULTS_v1_frozen_563f11e.md").read_text(encoding="utf-8")
     sec = t[t.index("## Held-out"):]
     def cells(label):
         line = next(l for l in sec.splitlines() if l.startswith(f"| {label}"))
@@ -78,7 +78,7 @@ def main() -> None:
              "| Blind run | Guard at | Cases | Guard correct | Guard wrong bookings | Guard missed emergencies | "
              "Raw model wrong bookings | dateparser wrong bookings | Raw / dateparser correct |",
              "|---|---|---|---|---|---|---|---|---|"]
-    table = [("Held-out v1 (spec vocabulary) [from RESULTS_v1_frozen_b721436.md]", "b721436", v1_row())]
+    table = [("Held-out v1 (spec vocabulary) [from RESULTS_v1_frozen_563f11e.md]", "563f11e", v1_row())]
     for label, commit, f, keep in RUNS:
         if not (ROOT / "eval" / f).exists():
             continue

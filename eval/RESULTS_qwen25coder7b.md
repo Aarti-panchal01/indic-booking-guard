@@ -35,7 +35,7 @@ model calls: 156, model latency p50 14.5 s, p90 15.9 s (recorded when the cache 
 | mixed_other | 16 | 3 / 2 | 4 / 0 | 15 / 0 |
 
 
-## Held-out v1 (separate author; blind result was 23/24 with 1 wrong write, see RESULTS_v1_frozen_b721436.md; numbers below are AFTER the H024 fix, so not blind): 24 cases
+## Held-out v1 (separate author; blind result was 23/24 with 1 wrong write, see RESULTS_v1_frozen_563f11e.md; numbers below are AFTER the H024 fix, so not blind): 24 cases
 
 model calls: 24, model latency p50 14.3 s, p90 15.3 s (recorded when the cache was filled); parse status: {'ok': 24}. Guard decide() incl. SQLite checks and write: p50 1.46 ms, max 1.97 ms (this run).
 

@@ -144,7 +144,7 @@ A spoken hour h with a day-part: pick the 24h time inside that day-part (shaam 4
 
 ## 5. Red flags (escalate)
 
-Source: WHO cardiovascular diseases fact sheet, 2025-07-31, https://www.who.int/news-room/fact-sheets/detail/cardiovascular-diseases-(cvds) (raw-verified in `decisions/SOURCES.md`). The Hindi and Kannada phrases are the author's translation, **not clinically validated; cardiac and stroke signs only**. A real deployment needs a clinician to own this list.
+Source: WHO cardiovascular diseases fact sheet, 2025-07-31, https://www.who.int/news-room/fact-sheets/detail/cardiovascular-diseases-(cvds). The Hindi and Kannada phrases are the author's translation, **not clinically validated; cardiac and stroke signs only**. A real deployment needs a clinician to own this list.
 
 Escalate if the caller reports, for the patient, now or in the last day:
 - **Chest pain or chest discomfort**: chest pain, seene/seena mein dard, chhati/chaati mein dard, chhati mein bhaaripan, ede novu, edeli novu, ede bhaara.

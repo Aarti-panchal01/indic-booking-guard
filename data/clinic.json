@@ -1,5 +1,5 @@
 {
-  "_note": "Synthetic sample clinic for the golden set. Not a real clinic. Same 'Sample Physio Clinic' as the prototype demo.",
+  "_note": "Synthetic sample clinic for the golden set. Not a real clinic.",
   "name": "Sample Physio Clinic",
   "timezone": "Asia/Kolkata",
   "slot_minutes": 15,

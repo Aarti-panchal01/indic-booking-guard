@@ -4,7 +4,7 @@ A deterministic guardrail and eval layer that sits between an LLM's extraction a
 
 It resolves relative dates, day-parts and half-hours in code ("kal shaam saade chaar baje", "naale sanje naalku-vare"), checks a stated weekday against the date, validates the slot against the register, sends cardiac and stroke red-flag phrases to a human, refuses to book when words it does not understand sit next to the day or time, and never says "confirmed" unless the register write succeeded. A real local model (Ollama `qwen3:4b`) is in the loop. The eval compares the raw model, the community dateparser fix, and model + guard.
 
-Built in one night (Oct 7 to 8 2026) on top of the `clinic-overflow-desk` front-end prototype (copied unchanged into `prototype/`).
+Built over Oct 7 to 8 2026 as the backend and eval layer for a clinic booking front desk.
 
 **Results in one paragraph.** 503 synthetic cases, every number vs qwen3:4b (4B, Q4). The honest numbers are the **blind** ones: each test set was written by a separate agent, committed with its sha256, and run once on a frozen guard before anyone read it. On sets written in the spec's own vocabulary the guard was strong from the start (blind: 23/24, 81/84, 47/48; 2 wrong bookings in 156). On sets written to use words the spec does not list, the first guard was not: blind wrong bookings were 1, 6 and 7, and it missed 3 of 7, 4 of 8 and 3 of 9 emergencies. Each fix of the "add the words we missed" kind was beaten by the next probe. The design change that worked was flipping the polarity: **book only if every word next to the day and time is understood or known to be harmless**. On two fresh blind probes after that change: 35/60 and 33/60 correct (raw model 16 and 21, dateparser 15 and 14), **1 and 0 wrong bookings** (raw model 14 and 7, dateparser 0 and 1). **Emergencies are the weak side**: the second of those probes missed 4 of 7, one in plain English. The dateparser baseline almost never books wrongly because it understands almost nothing (it asked again or handed off on 42 and 40 of those 60). **Caveat first:** all cases are AI-written and not native-speaker-audited; nothing here is a production error rate. See [Failure analysis](#failure-analysis).
 
@@ -14,7 +14,7 @@ Built in one night (Oct 7 to 8 2026) on top of the `clinic-overflow-desk` front-
 
 **Broken workflow.** The caller says a day and a time in their own words. The model turns them into a date and a time. A tool writes the booking. The agent tells the caller it is confirmed. Three things go wrong:
 1. **Dates and times.** Production booking agents get them wrong today, on frontier models. A live gpt-realtime reservation agent "usually resolves the date one day late", and gpt-realtime-1.5 said "Ok, on Friday, 9th May" for a Saturday and kept insisting after the caller corrected it ([OpenAI community, 2026-02-14, updated 2026-04-07](https://community.openai.com/t/bug-gpt-realtime-usually-miscomputes-next-weekday-by-1-day-appears-to-use-2025-calendar/1374221)). An AI-receptionist builder writes "We all know llms are super bad at dates and time", and the suggested fix is to resolve them in Python with dateparser ([LiveKit community, 2026-07-24](https://community.livekit.io/t/agent-hallucination-data-and-time/1723)).
-2. **That fix does not cover Indic speech.** dateparser 1.4.3 returns `None` for "kal shaam saade chaar baje", "parso subah 10 baje" and "naale sanje naalku gante" (local test, `../decisions/local-model-probe.md`).
+2. **That fix does not cover Indic speech.** dateparser 1.4.3 returns `None` for "kal shaam saade chaar baje", "parso subah 10 baje" and "naale sanje naalku gante" (local test).
 3. **Emergencies and failed writes.** A booking agent must not book a caller who reports chest pain, and must not say "confirmed" when the write failed.
 
 **Constraints.** Latency: the guard adds 1 to 2 ms per call (p50, measured while a second model ran on the same CPU), so the model call (about 10 s locally) dominates. Cost: no paid API; one local 4B model. Compliance: minimum data (name, slot); no medical advice; red flags go to a human or 108. Language: Hinglish and Kannada-English in Latin script; Devanagari is out of scope for dates (red flags in Devanagari are covered).
@@ -64,14 +64,13 @@ Human in the loop: red flags (human or 108), non-booking requests (staff list), 
 | `guard/` | schema, model interface, normaliser, red flags, guard, baselines, register |
 | `eval/run.py` | Labelled sets: writes `eval/RESULTS.md` and per-case `eval/RESULTS_cases.jsonl` |
 | `eval/oov.py` | OOV probes: correct / safe miss / wrong booking / missed emergency / false escalation |
-| `eval/*_blind.md`, `eval/RESULTS_v1_frozen_b721436.md`, `eval/RESULTS_golden156_first.md` | The blind runs, kept exactly as first generated |
+| `eval/*_blind.md`, `eval/RESULTS_v1_frozen_563f11e.md`, `eval/RESULTS_golden156_first.md` | The blind runs, kept exactly as first generated |
 | `eval/collect.py` | Calls the real model once per case, caches to `eval/cache/*.jsonl` (committed) |
 | `eval/confirmation.py` | Ungated confirmation baseline on write failures, writes `eval/CONFIRMATION.md` |
 | `api.py` | Thin FastAPI wrapper: `POST /book` (model + guard + register), `GET /bookings`. Local only, no auth |
 | `tests/` | pytest, mock model only (529 tests) |
-| `prototype/` | The Oct 1 front-end demo, unchanged |
 
-Every held-out and probe file's sha256 and commit time is in `../STATE.md`, recorded before the guard was run on it.
+Every held-out and probe file's sha256 and commit time is in `eval/PROVENANCE.md`, recorded before the guard was run on it.
 
 ## How to run
 
@@ -108,18 +107,18 @@ Each row is the first run of a frozen guard on a set its author had not read. Wr
 
 | Blind run | Guard at | Cases | Guard correct | Guard wrong bookings | Guard missed emergencies | Raw model wrong bookings | dateparser wrong bookings | Raw / dateparser correct |
 |---|---|---|---|---|---|---|---|---|
-| Held-out v1 (spec vocabulary) | `b721436` | 24 | 23 | **1** | 0/3 | 8 | 1 | 4 / 1 |
-| Golden G073 to G156, first run | `00f0c25` | 84 | 81 | **1** | 1/10 | 26 | 3 | 16 / 15 |
-| Held-out v2 (spec vocabulary, adversarial) | `00f0c25` | 48 | 47 | 0 | 0/6 | 17 | 1 | 12 / 9 |
-| OOV probe v1 | `759faf4` | 45 | 24 | **1** | **3/7** | 11 | 0 | 14 / 10 |
-| OOV probe v2 | `92dcbd9` | 50 | 31 | **6** | **4/8** | 12 | 2 | 12 / 10 |
-| OOV probe v3 | `2f4b7be` | 60 | 25 | **7** | **3/9** | 19 | 0 | 17 / 13 |
-| OOV probe v4, after the allowlist change | `0a55b09` | 60 | 35 | **1** | **1/7** | 14 | 0 | 16 / 15 |
-| OOV probe v5, second run of the allowlist guard | `5903181` | 60 | 33 | 0 | **4/7** | 7 | 1 | 21 / 14 |
-| OOV probe v6, after the red-flag and stacked-day fix (18 emergencies) | `180bd58` | 60 | 45 | **1** | **6/18** | 15 | 2 | 17 / 12 |
-| OOV probe v7, after the two-tier, loss-of-function and Marathi round (22 emergencies) | `5ef403e` | 60 | 43 | 0 | **7/22** | 16 | 2 | 11 / 10 |
+| Held-out v1 (spec vocabulary) | `563f11e` | 24 | 23 | **1** | 0/3 | 8 | 1 | 4 / 1 |
+| Golden G073 to G156, first run | `134afc9` | 84 | 81 | **1** | 1/10 | 26 | 3 | 16 / 15 |
+| Held-out v2 (spec vocabulary, adversarial) | `134afc9` | 48 | 47 | 0 | 0/6 | 17 | 1 | 12 / 9 |
+| OOV probe v1 | `b17251e` | 45 | 24 | **1** | **3/7** | 11 | 0 | 14 / 10 |
+| OOV probe v2 | `021e809` | 50 | 31 | **6** | **4/8** | 12 | 2 | 12 / 10 |
+| OOV probe v3 | `e9af785` | 60 | 25 | **7** | **3/9** | 19 | 0 | 17 / 13 |
+| OOV probe v4, after the allowlist change | `b485dac` | 60 | 35 | **1** | **1/7** | 14 | 0 | 16 / 15 |
+| OOV probe v5, second run of the allowlist guard | `333fae9` | 60 | 33 | 0 | **4/7** | 7 | 1 | 21 / 14 |
+| OOV probe v6, after the red-flag and stacked-day fix (18 emergencies) | `84ae5c2` | 60 | 45 | **1** | **6/18** | 15 | 2 | 17 / 12 |
+| OOV probe v7, after the two-tier, loss-of-function and Marathi round (22 emergencies) | `280db73` | 60 | 43 | 0 | **7/22** | 16 | 2 | 11 / 10 |
 
-Recomputed from the committed per-case files by `python -I eval/ledger.py` (`eval/BLIND_LEDGER.md`); a wrong booking on a caller with an emergency counts in both columns. Files: `eval/RESULTS_v1_frozen_b721436.md`, `eval/RESULTS_golden156_first.md`, `eval/RESULTS_v2_blind.md`, `eval/OOV_RESULTS_blind.md`, `eval/OOV2_RESULTS_blind.md`, `eval/OOV3_RESULTS_blind.md`, `eval/OOV4_RESULTS_blind.md`, `eval/OOV5_RESULTS_blind.md`, `eval/OOV6_RESULTS_blind.md`, `eval/OOV7_RESULTS_blind.md`. "Correct" means the same action and the same slot (or the same ask-again reason). Not correct but safe (asked again or handed off) is the rest: on OOV v4 that is 23/60 for the guard and 42/60 for dateparser.
+Recomputed from the committed per-case files by `python -I eval/ledger.py` (`eval/BLIND_LEDGER.md`); a wrong booking on a caller with an emergency counts in both columns. Files: `eval/RESULTS_v1_frozen_563f11e.md`, `eval/RESULTS_golden156_first.md`, `eval/RESULTS_v2_blind.md`, `eval/OOV_RESULTS_blind.md`, `eval/OOV2_RESULTS_blind.md`, `eval/OOV3_RESULTS_blind.md`, `eval/OOV4_RESULTS_blind.md`, `eval/OOV5_RESULTS_blind.md`, `eval/OOV6_RESULTS_blind.md`, `eval/OOV7_RESULTS_blind.md`. "Correct" means the same action and the same slot (or the same ask-again reason). Not correct but safe (asked again or handed off) is the rest: on OOV v4 that is 23/60 for the guard and 42/60 for dateparser.
 
 What the ledger says:
 - **Inside the spec's vocabulary, the guard works**, and the two blind wrong bookings there were real bugs, both fixed (a model "name" that was really time words; a model-invented "Wednesday" fed to the dateparser fallback).
@@ -129,7 +128,7 @@ What the ledger says:
 - **v6 (Oct 8), the first blind run after the red-flag fix: better, not solved.** 18 emergencies written in four real-world framings. The guard caught 12 of 18 (v5: 3 of 7); the raw model alone caught 8 of 18. By framing: comparison 5/5, relative calling for someone else 3/4, symptom buried after a booking request 2/4, underplayed ("kuch khaas nahi", "swalpa ashte") 2/5. 1 false escalation (a negated Kannada list) and 1 wrong booking (a weekday chained to an offset). Correct answers 45/60, the best OOV blind run so far. Caveat on the comparison number: the brief given to the v6 author named comparison framings as examples, and one fix rule (chest word plus "it feels / it is happening") targets that framing. The rule came from v4 case S035, not from v6, but read 5/5 with that in mind.
 - **v7 (Oct 8), after the second round (two tiers, loss of function, Marathi): the same recall, a harder probe, no wrong bookings.** 22 emergencies; its brief named categories only, no example phrases. The guard caught 15 of 22 (68%; v6 was 67%), all 15 through the urgent tier; the human-check tier caught none of the 7 misses. The raw model alone caught 6 of 22. By framing (tags overlap): buried after a booking 6/7, comparison 5/6, Marathi 3/4, relative calling 8/12, underplayed 5/9, loss of function 2/5. 0 wrong bookings (the raw model made 13), 2 false escalations (1 urgent, 1 human check), 43/60 correct.
 
-### Current numbers on the labelled sets (final guard `5ef403e`; not blind: the guard was tuned on these. Unchanged from `5903181`, so neither Oct 8 round cost anything here)
+### Current numbers on the labelled sets (final guard `280db73`; not blind: the guard was tuned on these. Unchanged from `333fae9`, so neither Oct 8 round cost anything here)
 
 | Set | Guard correct | Guard wrong bookings | Guard false blocks | Escalation recall | Raw model correct / wrong bookings | dateparser correct / wrong bookings |
 |---|---|---|---|---|---|---|
@@ -148,7 +147,7 @@ On the OOV probes v1 to v3 (dev now): correct 45/45, 34/50, 30/60, with 0 wrong 
 
 Guard columns are after the Oct 8 fix (before it: 401 / 1 and 388 / 1). Over these 503 cases the fix moved escalation recall from 60/65 to 65/65 (qwen3) and 61/65 to 65/65 (qwen2.5), false escalations from 3 to 1 and 17 to 16, wrong bookings from 1 to 0 for both (`python -I eval/redflag_report.py`). These sets include v4 and v5, which the fix was written against, so this is not evidence of generalisation; v6 above is. The wrong booking that used to remain (OOV v4 S001, "parso ke do din baad") now asks again.
 
-After the second Oct 8 round (`5ef403e`), over the 563 non-blind cases including v6 (`python -I eval/redflag_report.py`): qwen3:4b emergencies caught 77/83 to 81/83 (80 urgent, 1 human check), false escalations 2 to 2, wrong bookings 1 to 0, correct 453 to 459; qwen2.5-coder:7b 71/83 to 78/83, 17 to 17, 2 to 0, 429 to 438. The human-check tier added no false escalations on these sets. qwen2.5-coder:7b was never run live on v6, so its v6 row is the guard on the transcript alone. Fitted numbers: v7 above is the one to trust. The second model found one new guard bug before this table: on held-out v2 it returned the caller's doctor ("Dr. Menon ge hinde torisidde") as the patient, and the guard booked under that name. Same lesson as H024 (the name was in the transcript, in the wrong role); fixed with a doctor-title check and a test, and qwen3's numbers did not change. The cost of a model the guard was not tuned with shows up as asking again more: main set false blocks 6/70 against 2/70, because qwen2.5 labels intents and names differently. qwen2.5's own `red_flag` also fired on two non-emergencies, and the guard escalates on either signal, so it inherited false escalations: 1 on OOV v3, 1 on v4 and 5 on v5 (against 3 with qwen3 on v5).
+After the second Oct 8 round (`280db73`), over the 563 non-blind cases including v6 (`python -I eval/redflag_report.py`): qwen3:4b emergencies caught 77/83 to 81/83 (80 urgent, 1 human check), false escalations 2 to 2, wrong bookings 1 to 0, correct 453 to 459; qwen2.5-coder:7b 71/83 to 78/83, 17 to 17, 2 to 0, 429 to 438. The human-check tier added no false escalations on these sets. qwen2.5-coder:7b was never run live on v6, so its v6 row is the guard on the transcript alone. Fitted numbers: v7 above is the one to trust. The second model found one new guard bug before this table: on held-out v2 it returned the caller's doctor ("Dr. Menon ge hinde torisidde") as the patient, and the guard booked under that name. Same lesson as H024 (the name was in the transcript, in the wrong role); fixed with a doctor-title check and a test, and qwen3's numbers did not change. The cost of a model the guard was not tuned with shows up as asking again more: main set false blocks 6/70 against 2/70, because qwen2.5 labels intents and names differently. qwen2.5's own `red_flag` also fired on two non-emergencies, and the guard escalates on either signal, so it inherited false escalations: 1 on OOV v3, 1 on v4 and 5 on v5 (against 3 with qwen3 on v5).
 
 **Confirmation honesty on write failures** (`eval/CONFIRMATION.md`, hand check in `eval/CONFIRMATION_HANDCHECK.md`). The ungated model sees an explicit tool error and writes its own reply (8 cases x 3 error types = 24 replies). It **never explicitly claimed the booking was done** (0/24; 1 ambiguous). That part of the hypothesis is not supported at this setting. The free-text replies failed in other ways: English to 21/21 non-English callers, a wrong weekday or date for the slot 3/24 ("Wednesday the 13th of October" for a Tuesday), an invented clinic phone number 2/24, and "try again later" 23/24. The guard replies with fixed text and sets `confirmed=True` only after a successful write (tested in `tests/test_confirmation_gate.py`). **Its fixed text is English-only today**, which is the same language problem; see the roadmap.
 
@@ -189,7 +188,7 @@ What was tried, in order:
 
 And it over-escalated 3 of v5's non-emergencies: negated lists ("No chest pain **or breathlessness**", "ede novu mattu usiraata kashta illa") where the negation check only covers the word next to the symptom, and a heart attack three years ago that the model flagged.
 
-**The Oct 8 fix** (`guard/redflags.py`, guard `180bd58`):
+**The Oct 8 fix** (`guard/redflags.py`, guard `84ae5c2`):
 - body part near a symptom word (within 5 words, same comma-part) on word stems, for chest, breath, face, speech, eyes and one-side weakness ("edeya", "seeney", "kaanisthilla" all match);
 - one negation covers a whole list ("no chest pain or breathlessness", "ede novu mattu usiraata kashta illa"), but only when every word between the negation and the symptom is a symptom word or a joiner; anything else in between, it escalates ("No fever, chest pain since morning");
 - past history ("3 saal pehle", "varsha hinde") drops a symptom only in a comma-part that does not also say now;
@@ -204,7 +203,7 @@ And it over-escalated 3 of v5's non-emergencies: negated lists ("No chest pain *
 - Chest plus nausea with a new chest word: "chhati mein halka sa khinchav hai aur ulti jaisa" (there is a chest-plus-sweat rule but no chest-plus-nausea rule).
 Four of the six were underplayed or buried after a booking request, the framings where the model also looks away. The one false escalation was a comma list with a word the negation vocabulary did not know ("usiru kattodu").
 
-**The second Oct 8 round** (`5ef403e`), written before v7 and without copying any v6 phrase:
+**The second Oct 8 round** (`280db73`), written before v7 and without copying any v6 phrase:
 - **Two tiers.** URGENT: a known sign, so "call 108" and staff are alerted. HUMAN CHECK: a red-flag body region (chest, heart, arm, shoulder, jaw, face, mouth, eyes, tongue or voice, head, breath, one side) plus any complaint or feeling word plus an onset today ("since this evening", "abhi", "achanak", "ivattu ... inda", "-pasun"), even when the sign word is unknown, unless the sentence gives an injury, gym, dental or old-history reason. Staff call back now and nothing is booked. Both count as escalations. Knee, back, ankle and neck are left out of the human-check regions on purpose: in a physio clinic "pain since this morning" there is a routine booking.
 - **Loss of function**: a body part plus "cannot lift / hold / move / feel" or "not working", in Hindi, Kannada, Marathi and English, built from verb shapes, not fixed phrases.
 - **Marathi** vocabulary for every sign group, on stems, marked in the code as AI-written and not native-speaker audited.
@@ -251,6 +250,5 @@ Unlike dates, a missed emergency cannot be made safe by asking again. A list wil
 5. **Language-matched fixed replies** for ask-again, escalate and write-failed, in Hinglish and Kannada-English.
 6. **Real speech**: record 30 utterances, transcribe with an Indic ASR, run the same eval.
 7. **Audit mode**: run the guard offline over a voice-agent vendor's execution logs and flag calls where the booked slot disagrees with the caller's words, or where unknown words sat next to the slot.
-8. **Wire the prototype UI** (`prototype/index.html`) to `POST /book`.
-9. **A frontier model** through the same cache and eval, so the lift is not tied to one 4B model.
-10. **Success-shaped errors** for the confirmation test: HTTP 200 with an error body, a tool call with no result, a partial write.
+8. **A frontier model** through the same cache and eval, so the lift is not tied to one 4B model.
+9. **Success-shaped errors** for the confirmation test: HTTP 200 with an error body, a tool call with no result, a partial write.

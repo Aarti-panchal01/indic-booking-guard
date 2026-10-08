@@ -1,7 +1,7 @@
 """Deterministic date/time normaliser for Hinglish and Kannada-English (Latin script).
 
 Implements TAXONOMY.md section 3. No model calls. Pure functions of (text, reference).
-Written after held_out.jsonl was committed (sha256 in STATE.md) and without reading it.
+Written after held_out.jsonl was committed (sha256 in eval/PROVENANCE.md) and without reading it.
 """
 from __future__ import annotations
 

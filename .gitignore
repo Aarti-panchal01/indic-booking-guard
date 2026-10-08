@@ -1,4 +1,12 @@
+# secrets
+.env
+.env.*
+!.env.example
+# python and test caches (eval/cache/*.jsonl is committed on purpose: it lets anyone rerun the eval offline)
 __pycache__/
 *.pyc
-.env
 .pytest_cache/
+# local demo register and deploy state
+*.db
+*.sqlite
+.vercel/
